@@ -98,13 +98,13 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-say]
 const AU = new Audio(); let auEnd = 0; AU.preload = 'none';
 AU.addEventListener('timeupdate', () => { if (auEnd && AU.currentTime >= auEnd) { AU.pause(); auEnd = 0; } });
 function playClip(part, a, b) {
-  const src = `audio/vocab/part${String(part).padStart(2, '0')}.mp3`;
+  const src = typeof part === 'string' ? part : `audio/vocab/part${String(part).padStart(2, '0')}.mp3`;
   speechSynthesis?.cancel?.(); auEnd = b;
   const go = () => { AU.currentTime = a; AU.play().catch(() => { }); };
   if (!AU.src.endsWith(src)) { AU.src = src; AU.addEventListener('loadedmetadata', go, { once: true }); AU.load(); } else go();
 }
-document.addEventListener('click', e => { const b = e.target.closest('[data-au]'); if (b) { e.preventDefault(); e.stopPropagation(); const [p, x, y] = b.dataset.au.split(',').map(Number); playClip(p, x, y); } });
-const vSay = it => it.au ? `<span class="au-btns">${it.au[3] != null ? `<button class="icon-btn" data-au="${it.au[0]},${it.au[3]},${it.au[4]}" aria-label="Nghe từ (giọng người đọc)" title="Nghe từ (giọng người đọc)">${ICON.speak}</button>` : sayBtn(it.r || it.w)}<button class="icon-btn ex-au" data-au="${it.au[0]},${it.au[1]},${it.au[2]}" aria-label="Nghe từ và câu ví dụ" title="Nghe từ + câu ví dụ">例</button></span>` : sayBtn(it.r || it.w);
+document.addEventListener('click', e => { const f = e.target.closest('[data-src]'); if (f) { e.preventDefault(); e.stopPropagation(); playClip(f.dataset.src, 0, 9999); return; } const b = e.target.closest('[data-au]'); if (b) { e.preventDefault(); e.stopPropagation(); const [p, x, y] = b.dataset.au.split(',').map(Number); playClip(p, x, y); } });
+const vSay = it => it.au3 ? `<span class="au-btns"><button class="icon-btn" data-src="${it.au3}" aria-label="Nghe từ và câu ví dụ (audio sách)" title="Nghe từ + câu ví dụ (audio sách)">${ICON.speak}</button></span>` : it.au ? `<span class="au-btns">${it.au[3] != null ? `<button class="icon-btn" data-au="${it.au[0]},${it.au[3]},${it.au[4]}" aria-label="Nghe từ (giọng người đọc)" title="Nghe từ (giọng người đọc)">${ICON.speak}</button>` : sayBtn(it.r || it.w)}<button class="icon-btn ex-au" data-au="${it.au[0]},${it.au[1]},${it.au[2]}" aria-label="Nghe từ và câu ví dụ" title="Nghe từ + câu ví dụ">例</button></span>` : sayBtn(it.r || it.w);
 const sayBtn = t => `<button class="icon-btn" data-say="${esc(t)}" aria-label="Nghe phát âm">${ICON.speak}</button>`;
 
 let toastT;
@@ -299,7 +299,7 @@ on(/^\/vocab\/([\w-]+)$/, async (id) => {
   main.innerHTML = `<a class="crumb" href="#/vocab">‹ Từ vựng</a><h1>${esc(d.name)}</h1><p class="lead">${esc(d.group)} · ${d.items.length} từ · đã học ${p.l} · thuộc ${p.m}</p>
   <div class="row" style="margin-bottom:16px">
    <button class="btn ${act ? '' : 'primary'}" id="tog">${act ? 'Ngừng học bài này' : 'Học bài này'}</button>
-   <a class="btn" href="#/review?deck=v:${id}&mode=browse">Lật thẻ (không chấm)</a>
+   <a class="btn" href="#/review?deck=v:${id}&mode=browse">Lật thẻ (không chấm)</a>${d.audio ? `<a class="btn" href="#/audio?f=${encodeURIComponent(d.audio)}">▶ Nghe cả bài</a>` : ''}
    <a class="btn" href="#/quiz?deck=${id}">Trắc nghiệm nghĩa</a></div>
   <div class="words">${d.items.map(wordRow).join('')}</div>`;
   $('#tog').onclick = () => { S.active['v:' + id] = !act; if (act) delete S.active['v:' + id]; save(); toast(act ? 'Đã bỏ khỏi lịch học' : 'Đã thêm vào lịch học hằng ngày'); route(); };
@@ -784,9 +784,11 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
   main.innerHTML = `<div class="timer">${timed ? `<span class="clock" id="clk"></span><span class="muted small">còn lại</span>` : `<span class="muted small">Chế độ luyện tập — chọn đáp án để xem đúng/sai</span>`}<span class="spacer"></span><span class="small muted" id="cnt"></span>${timed ? '<button class="btn sm primary" id="sub">Nộp bài</button>' : ''}</div>
   <a class="crumb" href="#/tests">‹ Danh sách đề</a><h1>${esc(E.title)}</h1><p class="muted">${esc(E.set)}</p>
   ${E.scan ? `<div class="row" style="margin-bottom:8px"><div class="seg" id="scanmode"><button data-m="0" class="${scanTxt() ? '' : 'on'}">Ảnh đề gốc</button><button data-m="1" class="${scanTxt() ? 'on' : ''}">Chữ (nhận dạng OCR)</button></div></div><p class="small muted">Đề scan: “Ảnh đề gốc” hiển thị đúng bản in; “Chữ” là văn bản nhận dạng tự động (có thể sai vài chữ, câu nào tách lỗi vẫn hiện ảnh gốc). Đáp án đã đối chiếu thủ công với bảng đáp án chính thức.</p>` : ''}
+  ${I.some(x => x.id === 'ls' + id.slice(2)) && !id.startsWith('ls') ? `<p><a class="btn sm" href="#/test/ls${id.slice(2)}?mode=practice">▶ Phần nghe hiểu của đề này</a></p>` : ''}
+  ${E.audio ? `<div class="pq-au panel" style="margin-bottom:10px"><span class="small"><b>Toàn bộ bài nghe</b></span><audio controls preload="none" src="${E.audio}" style="flex:1"></audio></div>` : ''}
   ${E.paper ? `${E.note ? `<p class="small muted">${esc(E.note)}</p>` : ''}<p class="small muted">Đọc đề trên ảnh gốc, chọn đáp án trong phiếu trả lời${matchMedia('(max-width: 900px)').matches ? ' (nút “Phiếu trả lời” ở góc dưới)' : ' bên phải'}. ${E.sections.some(x => x.au) ? '' : 'Phần nghe hiểu không có file âm thanh nên không đưa vào.'}</p>
   <div class="paper"><div class="paper-pages">${E.paper.map((u, i) => `<img loading="${i < 2 ? 'eager' : 'lazy'}" src="${u}" alt="Trang ${i + 1}">`).join('')}</div>
-  <div class="paper-sheet" id="sheet"><div class="sheet-head"><b>Phiếu trả lời</b><button class="btn sm ghost" id="sheetx">Đóng</button></div>${E.sections.map(s => `<div class="pq-sec"><div class="pq-title jp">${/^問題/.test(s.name) ? esc(s.name) : `問題${s.no} <span class="muted small">${esc(s.name)}</span>`}</div>${(s.au || []).map((u, k) => `<div class="pq-au"><span class="small muted">${s.au.length > 1 ? (k + 1) + '番' : 'Audio'}</span><audio controls preload="none" src="${u}"></audio></div>`).join('')}${testBlocks(s, '')}</div>`).join('')}${E.script ? `<details class="small" style="margin-top:8px"><summary>Đáp án chi tiết + script nghe (trang sách)</summary>${E.script.map(u => `<img loading="lazy" src="${u}" alt="Trang đáp án" style="width:100%;margin-top:6px">`).join('')}</details>` : ''}</div></div>
+  <div class="paper-sheet" id="sheet"><div class="sheet-head"><b>Phiếu trả lời</b><button class="btn sm ghost" id="sheetx">Đóng</button></div>${E.sections.map(s => `<div class="pq-sec"><div class="pq-title jp">${/^問題/.test(s.name) ? esc(s.name) : `問題${s.no} <span class="muted small">${esc(s.name)}</span>`}</div>${(s.au || []).map((u, k) => `<div class="pq-au"><span class="small muted">${s.au.length > 1 ? (k + 1) + '番' : 'Audio'}</span><audio controls preload="none" src="${typeof u === 'string' ? u : u.f + '#t=' + u.a + (u.b ? ',' + u.b : '')}"></audio></div>`).join('')}${testBlocks(s, '')}</div>`).join('')}${E.script ? `<details class="small" style="margin-top:8px"><summary>${E.id.startsWith('ls') ? 'Đáp án + script nghe (原文)' : 'Đáp án chi tiết + script nghe (trang sách)'}</summary>${E.script.map(u => `<img loading="lazy" src="${u}" alt="Trang đáp án" style="width:100%;margin-top:6px">`).join('')}</details>` : ''}</div></div>
   <button class="btn primary sheet-fab" id="sheetbtn">Phiếu trả lời</button>` :
   E.sections.map(s => `<div class="sec-title">問題${s.no}　<span class="jp" style="font-weight:500">${esc(s.instr)}</span></div>${testBlocks(s, '')}`).join('')}
   <div id="result"></div>${timed ? '<div style="margin-top:20px"><button class="btn primary" id="sub2">Nộp bài</button></div>' : ''}`;
