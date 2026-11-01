@@ -290,7 +290,7 @@ on(/^\/vocab$/, async (q) => {
 const exHTML = (i, n) => (i.ex || []).slice(0, n).map((e, k) => `<div class="ex">${esc(e)}${i.exvi?.[k] ? `<div class="exvi">${esc(i.exvi[k])}</div>` : ''}</div>`).join('');
 function wordRow(i) {
   return `<div class="word"><div><div class="w">${esc(i.w)}</div><div class="r">${esc(i.r)}${i.hv ? ' · ' + esc(i.hv) : ''}</div></div>
-  <div class="m">${esc(i.m)}${exHTML(i, 2)}</div>${vSay(i)}</div>`;
+  <div class="m">${esc(i.m)}${i.chk ? ' <span class="tag warn" title="Chữ nhận dạng tự động chưa khớp từ điển — hãy xem ảnh gốc">cần đối chiếu</span>' : ''}${exHTML(i, 2)}${(i.rel || []).map(r => `<div class="small muted">＋ <span class="jp">${esc(r)}</span></div>`).join('')}${i.img ? `<details class="small"><summary>Xem bản gốc</summary><img loading="lazy" src="${i.img}" alt="Mục từ trong sách" style="width:100%;max-width:640px;margin-top:4px;border:1px solid var(--line)"></details>` : ''}</div>${vSay(i)}</div>`;
 }
 on(/^\/vocab\/([\w-]+)$/, async (id) => {
   const d = (await decks()).find(x => x.id === id); if (!d) throw new Error('Không tìm thấy bài');
