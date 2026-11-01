@@ -30,7 +30,7 @@ applyTheme();
 const DATA = {};
 async function load(name) {
   if (DATA[name]) return DATA[name];
-  const r = await fetch(`data/${name}.json`);
+  const r = await fetch(`data/${name}.json`, { cache: 'no-cache' });
   if (!r.ok) throw new Error('Không tải được dữ liệu ' + name);
   return (DATA[name] = await r.json());
 }
@@ -189,7 +189,7 @@ async function route() {
   const [path, qs] = h.split('?');
   const q = Object.fromEntries(new URLSearchParams(qs || ''));
   const top = path.split('/')[1];
-  $$('#nav a[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === ({ vocab: 'learn', kanji: 'learn', grammar: 'learn', kana: 'learn', plan: 'learn', review: 'today', read: 'exam', mock: 'exam' }[top] || top)));
+  $$('#nav a[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === ({ vocab: 'learn', kanji: 'learn', grammar: 'learn', kana: 'learn', plan: 'learn', keigo: 'learn', tests: 'exam', test: 'exam', drill: 'exam', review: 'today', read: 'exam', mock: 'exam' }[top] || top)));
   for (const [re, fn] of routes) { const m = path.match(re); if (m) { try { await fn(...m.slice(1).map(decodeURIComponent), q); } catch (e) { main.innerHTML = `<div class="status err">${esc(e.message)}</div>`; console.error(e); } main.focus({ preventScroll: true }); return; } }
   location.hash = '#/today';
 }
@@ -244,6 +244,7 @@ on(/^\/learn$/, async () => {
     <a class="hub" href="#/kanji"><span class="glyph">漢</span><div><h3>Kanji N1</h3><p>${K.length} chữ theo 21 chương · đã học ${cnt('k:')}</p></div></a>
     <a class="hub" href="#/grammar"><span class="glyph">文</span><div><h3>Ngữ pháp</h3><p>${G.length} mẫu câu · đã học ${cnt('g:')}</p></div></a>
     <a class="hub" href="#/kana"><span class="glyph">あ</span><div><h3>Hiragana / Katakana</h3><p>Bảng chữ và trắc nghiệm</p></div></a>
+    <a class="hub" href="#/keigo"><span class="glyph">敬</span><div><h3>Kính ngữ</h3><p>34 động từ 尊敬語・謙譲語, quy tắc và trắc nghiệm</p></div></a>
     <a class="hub" href="#/plan"><span class="glyph">道</span><div><h3>Lộ trình 28 tuần</h3><p>Lịch học lớp N1 Dũng Mori, đánh dấu từng ngày</p></div></a>
   </div>`;
 });
@@ -545,7 +546,9 @@ on(/^\/exam$/, async () => {
   const ex = S.exams.slice(-5).reverse();
   main.innerHTML = `<h1>Thi thử</h1><p class="lead">Luyện theo đề tổng hợp có tính giờ, hoặc từng bài đọc hiểu.</p>
   <div class="grid-hub">
-    <a class="hub" href="#/mock"><span class="glyph">試</span><div><h3>Đề thi thử N1</h3><p>Kanji, từ vựng, ngữ pháp + đọc hiểu, chấm điểm theo phần</p></div></a>
+    <a class="hub" href="#/tests"><span class="glyph">本</span><div><h3>Đề thi đầy đủ</h3><p>38 đề N1 (言語知識・読解) có đáp án, thi 110 phút hoặc luyện tập</p></div></a>
+    <a class="hub" href="#/drill"><span class="glyph">型</span><div><h3>Luyện theo dạng câu</h3><p>漢字読み, 文脈規定, ★, đọc hiểu… gom từ tất cả các đề</p></div></a>
+    <a class="hub" href="#/mock"><span class="glyph">試</span><div><h3>Đề tự sinh ngẫu nhiên</h3><p>Trộn từ vựng, kanji, ngữ pháp + đọc hiểu, chấm theo phần</p></div></a>
     <a class="hub" href="#/read"><span class="glyph">読</span><div><h3>Luyện đọc hiểu</h3><p>${R.reduce((a, g) => a + g.sets.length, 0)} bài có đáp án</p></div></a>
   </div>
   ${ex.length ? `<h2>Lần làm gần đây</h2><div class="list">${ex.map(examRow).join('')}</div><p><a href="#/stats">Xem toàn bộ lịch sử</a></p>` : ''}`;
@@ -661,6 +664,139 @@ function runMock(m, minutes, kind) {
   $('#sub').onclick = $('#sub2').onclick = () => { const un = $$('.q').filter(q => !$('.opt.sel', q)).length; if (!un || confirm(`Còn ${un} câu chưa trả lời. Nộp bài?`)) submit(); };
 }
 
+/* ---------------- Đề thi đầy đủ ---------------- */
+const ul = s => esc(s).replace(/⟦/g, '<u>').replace(/⟧/g, '</u>');
+function jpParas(text) {
+  const ls = text.split('\n').filter(l => l.trim()); if (!ls.length) return '';
+  const mx = Math.max(...ls.map(l => l.length)); const out = []; let buf = '', prev = '';
+  for (const l of ls) {
+    if (buf && prev.length >= mx * 0.8 && !/^([（(][0-9０-９]+[)）]|[（(]注|＊|※|[AB]\s|[AB]$)/.test(l)) buf += l; else { if (buf) out.push(buf); buf = l; }
+    prev = l;
+  }
+  if (buf) out.push(buf);
+  return out.map(p => /^[（(][0-9０-９]+[)）]$|^[AB]$/.test(p) ? `<p class="nb">${ul(p)}</p>` : /^(（注|\(注|＊|※)/.test(p) ? `<p class="note">${ul(p)}</p>` : `<p>${ul(p)}</p>`).join('');
+}
+const SEC_GROUP = n => n <= 4 ? '文字・語彙' : n <= 7 ? '文法' : '読解';
+function testBlocks(sec, pfx) {
+  return sec.blocks.map(b => b.t === 'text' ? `<div class="passage">${jpParas(b.text)}</div>` : b.t === 'pre' ? `<pre class="passage pre">${esc(b.text)}</pre>` :
+    `<div class="q" data-n="${pfx}${b.n}"><div class="qt">${b.n}．${b.q ? ul(b.q) : ''}</div><div class="opts" style="${b.o.every(o => o.length < 12) ? 'grid-template-columns:repeat(auto-fit,minmax(140px,1fr))' : ''}">${b.o.map((o, j) => `<button class="opt" data-a="${j + 1}"><span class="n">${j + 1}</span><span>${ul(o)}</span></button>`).join('')}</div></div>`).join('');
+}
+on(/^\/tests$/, async () => {
+  const I = await load('exams/index');
+  const best = {}; for (const e of S.exams) if (e.test) best[e.test] = Math.max(best[e.test] ?? 0, e.score / e.total);
+  const sets = [...new Set(I.map(x => x.set))];
+  main.innerHTML = `<a class="crumb" href="#/exam">‹ Thi thử</a><h1>Đề thi đầy đủ</h1><p class="lead">Phần 言語知識（文字・語彙・文法）・読解, thời gian thi thật 110 phút. Chọn “Luyện tập” để xem đáp án ngay sau mỗi câu.</p>
+  ${sets.map(st => `<div class="groupname">${esc(st)}</div><div class="list">${I.filter(x => x.set === st).map(x => `<div class="item"><div class="glyph" style="font-size:.95rem;font-family:var(--ui)">${best[x.id] !== undefined ? Math.round(best[x.id] * 100) + '%' : '–'}</div>
+    <div class="body"><b>${esc(x.title)}</b><div class="sub">${x.nq} câu · ${x.secs.length} phần</div></div>
+    <a class="btn sm" href="#/test/${x.id}?mode=practice">Luyện tập</a><a class="btn sm primary" href="#/test/${x.id}?mode=timed">Thi</a></div>`).join('')}</div>`).join('')}`;
+});
+on(/^\/test\/(\w+)$/, async (id, q) => {
+  const I = await load('exams/index'); const meta = I.find(x => x.id === id); if (!meta) throw new Error('Không tìm thấy đề');
+  const E = await load('exams/' + id); const timed = q.mode !== 'practice';
+  const DK = 'n1.draft.' + id; let draft = {}; try { draft = JSON.parse(localStorage.getItem(DK)) || {}; } catch { }
+  let left = draft.left ?? 110 * 60, finished = false;
+  main.innerHTML = `<div class="timer">${timed ? `<span class="clock" id="clk"></span><span class="muted small">còn lại</span>` : `<span class="muted small">Chế độ luyện tập — chọn đáp án để xem đúng/sai</span>`}<span class="spacer"></span><span class="small muted" id="cnt"></span>${timed ? '<button class="btn sm primary" id="sub">Nộp bài</button>' : ''}</div>
+  <a class="crumb" href="#/tests">‹ Danh sách đề</a><h1>${esc(E.title)}</h1><p class="muted">${esc(E.set)}</p>
+  ${E.sections.map(s => `<div class="sec-title">問題${s.no}　<span class="jp" style="font-weight:500">${esc(s.instr)}</span></div>${testBlocks(s, '')}`).join('')}
+  <div id="result"></div>${timed ? '<div style="margin-top:20px"><button class="btn primary" id="sub2">Nộp bài</button></div>' : ''}`;
+  const all = E.sections.flatMap(s => s.blocks.filter(b => b.t === 'q').map(b => ({ ...b, sec: s.no })));
+  const byN = Object.fromEntries(all.map(b => [b.n, b]));
+  const counter = () => { const c = $$('.q').filter(x => $('.opt.sel,.opt.right,.opt.wrong', x)).length; $('#cnt').textContent = `${c}/${all.length} câu`; };
+  for (const [n, a] of Object.entries(draft.ans || {})) { const el = $(`.q[data-n="${n}"] .opt[data-a="${a}"]`); if (el) el.classList.add('sel'); }
+  const saveDraft = () => { try { const ans = {}; $$('.q').forEach(x => { const s = $('.opt.sel', x); if (s) ans[x.dataset.n] = +s.dataset.a; }); localStorage.setItem(DK, JSON.stringify({ ans, left })); } catch { } };
+  $$('.opt', main).forEach(b => b.onclick = () => {
+    const qe = b.closest('.q'); if (qe.classList.contains('graded')) return;
+    $$('.opt', qe).forEach(x => x.classList.remove('sel')); b.classList.add('sel');
+    if (!timed) { gradeQs(main, [{ el: qe, answer: byN[qe.dataset.n].a }]); }
+    else saveDraft();
+    counter();
+  });
+  counter();
+  if (timed) {
+    const fmt = s => `${String(s / 60 | 0).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    $('#clk').textContent = fmt(left);
+    const iv = setInterval(() => { if (finished) return; left--; $('#clk').textContent = fmt(Math.max(0, left)); $('#clk').classList.toggle('low', left < 600); if (left % 15 === 0) saveDraft(); if (left <= 0) submit(); }, 1000);
+    cleanup = () => { clearInterval(iv); if (!finished) saveDraft(); };
+    const submit = () => {
+      if (finished) return; finished = true; clearInterval(iv);
+      const groups = {}, secs = {}; let score = 0;
+      for (const b of all) {
+        const el = $(`.q[data-n="${b.n}"]`); const ok = gradeQs(main, [{ el, answer: b.a }]);
+        const g = SEC_GROUP(b.sec); groups[g] ||= [0, 0]; groups[g][0] += ok; groups[g][1]++;
+        const k = '問題' + b.sec; secs[k] ||= [0, 0]; secs[k][0] += ok; secs[k][1]++; score += ok;
+      }
+      const used = 110 * 60 - Math.max(0, left), pct = Math.round(100 * score / all.length);
+      S.exams.push({ id: 'e' + Date.now(), at: Date.now(), title: E.title, test: id, score, total: all.length, secs: groups, time: used }); save(); sync();
+      try { localStorage.removeItem(DK); } catch { }
+      $('#result').innerHTML = `<h2>Kết quả</h2><div class="score"><div><b class="${pct >= 60 ? 'pass' : 'fail'}">${pct}%</b>${score}/${all.length} câu · ${fmt(used)}</div>${Object.entries(groups).map(([k, v]) => `<div><b>${v[0]}/${v[1]}</b><span class="jp">${k}</span></div>`).join('')}</div>
+      <details class="box"><summary>Điểm từng 問題</summary><div class="score">${Object.entries(secs).map(([k, v]) => `<div><b>${v[0]}/${v[1]}</b><span class="jp">${k}</span></div>`).join('')}</div></details>
+      <p class="muted small">Đáp án đúng tô xanh, câu chọn sai tô đỏ. Cuộn lên để xem lại.</p><div class="row"><a class="btn primary" href="#/tests">Chọn đề khác</a><a class="btn" href="#/stats">Xem tiến độ</a></div>`;
+      $$('#sub,#sub2').forEach(b => b.disabled = true); $('#result').scrollIntoView({ behavior: 'smooth' });
+    };
+    $('#sub').onclick = $('#sub2').onclick = () => { const un = all.length - $$('.q').filter(x => $('.opt.sel', x)).length; if (!un || confirm(`Còn ${un} câu chưa trả lời. Nộp bài?`)) submit(); };
+  }
+});
+const DRILL = { 1: '漢字読み · Cách đọc kanji', 2: '文脈規定 · Điền từ theo ngữ cảnh', 3: '言い換え類義 · Từ đồng nghĩa', 4: '用法 · Cách dùng từ', 5: '文法形式の判断 · Chọn ngữ pháp', 6: '文の組み立て · Sắp xếp câu (★)', 7: '文章の文法 · Ngữ pháp trong đoạn văn', 8: '内容理解（短文）', 9: '内容理解（中文）', 10: '内容理解（長文）', 11: '統合理解 · Đọc so sánh A/B', 12: '主張理解（長文）', 13: '情報検索 · Tìm thông tin' };
+on(/^\/drill$/, async (q) => {
+  const I = await load('exams/index');
+  if (!q.type) {
+    const cnt = {}; for (const x of I) for (const [n, c] of x.secs) cnt[n] = (cnt[n] || 0) + c;
+    main.innerHTML = `<a class="crumb" href="#/exam">‹ Thi thử</a><h1>Luyện theo dạng câu</h1><p class="lead">Câu hỏi gom từ ${I.length} đề. Dạng 1–6: 10 câu ngẫu nhiên mỗi lượt; dạng 7–13: một bài đọc hoàn chỉnh.</p>
+    <div class="list">${Object.entries(DRILL).map(([n, name]) => `<a class="item" href="#/drill?type=${n}"><div class="glyph" style="font-size:1rem;font-family:var(--ui)">${n}</div><div class="body"><b class="jp">問題${n}　${name}</b><div class="sub">${cnt[n] || 0} câu trong kho</div></div></a>`).join('')}</div>`;
+    return;
+  }
+  const type = +q.type; const ids = shuffle(I.filter(x => x.secs.some(s => s[0] === type)).map(x => x.id));
+  let html = '', items = [];
+  if (type <= 6) {
+    const pool = [];
+    for (const id of ids.slice(0, 12)) { const E = await load('exams/' + id); const s = E.sections.find(z => z.no === type); if (s) for (const b of s.blocks) if (b.t === 'q') pool.push({ ...b, src: E.title }); }
+    items = pick(pool, 10).map((b, i) => ({ ...b, n: i + 1 }));
+    html = items.map(b => testBlocks({ blocks: [b] }, 'd') + `<div class="muted small" style="margin-top:2px">${esc(b.src)}</div>`).join('');
+  } else {
+    const E = await load('exams/' + ids[0]); const s = E.sections.find(z => z.no === type);
+    items = s.blocks.filter(b => b.t === 'q'); html = `<p class="muted small">${esc(E.title)}</p>` + testBlocks(s, 'd');
+  }
+  const inst = items.length ? '' : '<p class="muted">Không có câu hỏi.</p>';
+  main.innerHTML = `<a class="crumb" href="#/drill">‹ Các dạng câu</a><h1 class="jp">問題${type}　${esc(DRILL[type])}</h1>${inst}${html}
+  <div class="row" style="margin-top:20px"><span id="res"></span><span class="spacer"></span><button class="btn primary" id="again">Lượt mới</button></div>`;
+  let right = 0, done = 0;
+  $$('.opt', main).forEach(b => b.onclick = () => {
+    const qe = b.closest('.q'); if (qe.classList.contains('graded')) return;
+    b.classList.add('sel'); const it = items.find(x => 'd' + x.n === qe.dataset.n);
+    right += gradeQs(main, [{ el: qe, answer: it.a }]); done++;
+    $('#res').innerHTML = `<b>Đúng ${right}/${done}</b>`;
+    if (done === items.length) { S.exams.push({ id: 'e' + Date.now(), at: Date.now(), title: 'Luyện dạng 問題' + type, score: right, total: done, drill: type }); save(); }
+  });
+  $('#again').onclick = () => route();
+});
+
+/* ---------------- Kính ngữ ---------------- */
+on(/^\/keigo$/, async (q) => {
+  const K = await load('keigo');
+  if (q.quiz) {
+    const qs = shuffle(K.verbs).slice(0, 12).map(v => { const kind = Math.random() < .5 ? 'son' : 'ken'; return { v, kind }; }).filter(x => x.v[x.kind] && x.v[x.kind] !== '―');
+    let i = 0, right = 0;
+    const render = () => {
+      if (i >= qs.length) { main.innerHTML = `<div class="done"><div class="hanko"><div><b>${right}</b><span>/${qs.length}</span></div></div><h1>Kết quả kính ngữ</h1><div class="row" style="justify-content:center"><a class="btn" href="#/keigo">Bảng kính ngữ</a><button class="btn primary" id="again">Làm lại</button></div></div>`; $('#again').onclick = () => route(); return; }
+      const { v, kind } = qs[i]; const ans = v[kind];
+      const opts = shuffle([ans, ...pick(K.verbs.filter(x => x !== v).map(x => x[kind]).filter(x => x && x !== '―'), 3)]);
+      main.innerHTML = `<div class="session-top"><a class="btn sm ghost" href="#/keigo">✕</a><div class="prog"><i style="width:${100 * i / qs.length}%"></i></div><span class="small muted">${i + 1}/${qs.length}</span></div>
+      <div class="card" style="min-height:180px"><span class="kind tag">${kind === 'son' ? '尊敬語 · tôn kính' : '謙譲語 · khiêm nhường'}</span><div class="front long">${esc(v.v)}</div></div>
+      <div class="choices wide">${opts.map(o => `<button class="choice jp" data-ok="${o === ans}">${esc(o)}</button>`).join('')}</div>`;
+      $$('.choice').forEach(b => b.onclick = () => { const ok = b.dataset.ok === 'true'; if (ok) right++; $$('.choice').forEach(x => { x.disabled = true; if (x.dataset.ok === 'true') x.classList.add('right'); }); if (!ok) b.classList.add('wrong'); setTimeout(() => { if (!document.body.contains(b)) return; i++; render(); }, ok ? 700 : 1800); });
+    };
+    render(); return;
+  }
+  main.innerHTML = `<a class="crumb" href="#/learn">‹ Học</a><h1>Kính ngữ 敬語</h1>
+  <div class="row" style="margin-bottom:16px"><a class="btn primary" href="#/keigo?quiz=1">Trắc nghiệm kính ngữ</a><a class="btn" href="#/vocab/keigo">Học bằng thẻ</a></div>
+  <div class="stat-grid" style="margin-bottom:16px">${[['尊敬語', K.usage.son], ['謙譲語', K.usage.ken], ['丁寧語', K.usage.tei]].map(([a, b]) => `<div class="stat"><b class="jp" style="font-size:1.2rem">${a}</b><span>${esc(b)}</span></div>`).join('')}</div>
+  <div class="table-wrap"><table class="kt"><thead><tr><th>基本形</th><th>尊敬語</th><th>謙譲語</th><th>丁寧語</th></tr></thead><tbody>
+  ${K.verbs.map(v => `<tr><td><b>${esc(v.v)}</b></td><td>${esc(v.son)}</td><td>${esc(v.ken)}</td><td>${esc(v.tei)}</td></tr>`).join('')}</tbody></table></div>
+  <h2>Công thức</h2><div class="panel jp">${K.rules.map(r => `<p>${r.map(esc).join('<br>').replace(/・/g, '<br>・').replace(/^<br>/, '')}</p>`).join('')}</div>
+  <h2>Lỗi kính ngữ hay gặp</h2><div class="table-wrap"><table class="kt"><thead><tr><th>✗ Sai</th><th>✓ Đúng</th></tr></thead><tbody>${K.mistakes.map(m => `<tr><td>${esc(m.bad)}</td><td>${esc(m.good)}</td></tr>`).join('')}</tbody></table></div>
+  <h2>Từ thường → cách nói trang trọng</h2><div class="table-wrap"><table class="kt"><thead><tr><th>Thường ngày</th><th>Công việc</th></tr></thead><tbody>${K.formal.map(m => `<tr><td>${esc(m.plain)}</td><td>${esc(m.formal)}</td></tr>`).join('')}</tbody></table></div>`;
+});
+
 /* ---------------- Tiến độ ---------------- */
 on(/^\/stats$/, async () => {
   const [V, K, G] = await Promise.all([decks(), load('kanji'), load('grammar')]);
@@ -678,7 +814,7 @@ on(/^\/stats$/, async () => {
     rects += `<rect x="${(i / 7 | 0) * (cell + gap)}" y="${(i % 7) * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${col}"><title>${todayKey(d)}: ${n} lượt ôn</title></rect>`;
   }
   // biểu đồ điểm thi
-  const ex = S.exams.filter(e => !e.set).slice(-15);
+  const ex = S.exams.filter(e => !e.set && !e.drill).slice(-15);
   const W = 560, H = 160;
   const pts = ex.map((e, i) => [20 + i * (W - 40) / Math.max(1, ex.length - 1), H - 20 - (H - 40) * e.score / e.total]);
   const chart = ex.length ? `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Điểm các đề thi thử">

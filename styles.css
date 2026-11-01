@@ -241,3 +241,10 @@ details.box summary{cursor:pointer;font-weight:600}
 .week summary .tag{margin-left:6px}
 .date-in{padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--surface)}
 @media(max-width:520px){.day{grid-template-columns:1fr}}
+.passage u,.q u{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;text-decoration-color:var(--indigo-2)}
+.passage.pre{white-space:pre;overflow-x:auto;font-size:.88rem;line-height:1.7;text-indent:0}
+.table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m)}
+table.kt{border-collapse:collapse;width:100%;font-family:var(--jp);font-size:.95rem;min-width:560px}
+table.kt th{text-align:left;font-weight:700;background:var(--indigo-soft);color:var(--indigo);padding:8px 10px}
+table.kt td{padding:8px 10px;border-top:1px solid var(--line);vertical-align:top}
+.sec-title .jp{font-size:.95rem}

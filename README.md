@@ -10,7 +10,10 @@ Web app chạy trên máy tính và điện thoại (cài được lên màn hì
 - **Lộ trình 28 tuần** (lớp N1 Dũng Mori): đánh dấu từng buổi, liên kết thẳng đến bài từ vựng / kanji / ngữ pháp / đọc hiểu.
 - **Hiragana / Katakana**: bảng chữ và trắc nghiệm, ưu tiên chữ hay sai.
 - **Đọc hiểu**: 56 bài (短文, 中文, 長文, 比較, 検索) với 145 câu hỏi có đáp án, xem kèm bản gốc.
-- **Đề thi thử N1**: tự sinh đề (đọc kanji, từ vựng, ngữ pháp, đọc hiểu) có tính giờ, chấm điểm theo phần.
+- **Đề thi đầy đủ**: 37 đề Thaolejp (36 đề thi thử + đề test đầu vào) và đề JLPT N1 12/2021 — 2.665 câu có đáp án; thi có giờ 110 phút hoặc luyện tập từng câu.
+- **Luyện theo dạng câu**: 13 dạng 問題 (漢字読み, 文脈規定, ★, đọc hiểu…) gom từ tất cả các đề.
+- **Kính ngữ**: bảng 34 động từ 尊敬語・謙譲語・丁寧語, quy tắc, lỗi hay gặp, trắc nghiệm.
+- **Đề tự sinh**: tự sinh đề (đọc kanji, từ vựng, ngữ pháp, đọc hiểu) có tính giờ, chấm điểm theo phần.
 - **Tiến độ**: chuỗi ngày học, lịch học, số từ đã thuộc, biểu đồ điểm thi.
 - **Phát âm** bằng giọng đọc tiếng Nhật của trình duyệt.
 
