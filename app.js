@@ -276,13 +276,13 @@ const LTYPE = {
   4: ['即時応答', 'Nghe 1 câu ngắn, chọn câu đáp lại tự nhiên nhất (3 lựa chọn).'],
   5: ['統合理解', 'Nghe đoạn dài nhiều người nói, so sánh thông tin, có thể ghi chú.'],
 };
-const VOC_ORDER = ['Chinh phục từ vựng N1 (Thaolejp)', 'はじめての N1 単語3000 (Hàn–Việt)', 'Từ vựng N1 FULL (Dũng Mori)', 'N1 Trainingbook (theo ngày)', 'Từ vựng N1 tổng hợp', 'Chuyên đề N1 (Thaolejp)', 'Tiếp khách nhà hàng', 'Kính ngữ'];
+const VOC_ORDER = ['Chinh phục từ vựng N1', 'はじめての N1 単語3000 (Hàn–Việt)', 'Từ vựng N1 FULL', 'N1 Trainingbook (theo ngày)', 'Từ vựng N1 tổng hợp', 'Chuyên đề N1', 'Tiếp khách nhà hàng', 'Kính ngữ'];
 const VOC_NOTE = {
-  'Chinh phục từ vựng N1 (Thaolejp)': 'Nên học đầu tiên · 111 bài theo chủ đề · audio giọng người đọc',
+  'Chinh phục từ vựng N1': 'Nên học đầu tiên · 111 bài theo chủ đề · audio giọng người đọc',
   'はじめての N1 単語3000 (Hàn–Việt)': 'Mở rộng theo 14 chủ đề · audio từng từ + ví dụ',
-  'Từ vựng N1 FULL (Dũng Mori)': 'Ôn tổng hợp theo giáo trình lớp',
+  'Từ vựng N1 FULL': 'Ôn tổng hợp theo giáo trình lớp',
   'N1 Trainingbook (theo ngày)': 'Mỗi ngày một ít',
-  'Chuyên đề N1 (Thaolejp)': 'Phó từ, từ nối, động từ ghép, kanji khó… (rất hay ra trong đề)',
+  'Chuyên đề N1': 'Phó từ, từ nối, động từ ghép, kanji khó… (rất hay ra trong đề)',
 };
 function realExamPairs(I) {
   // ghép đề đọc + đề nghe theo kỳ thi
@@ -475,7 +475,7 @@ on(/^\/kanji\/(\d+)$/, async (c) => {
 });
 
 /* ---------------- Ngữ pháp ---------------- */
-const GSETS = { book: 'Ngữ pháp N1 (giáo trình, 22 chương)', freq: 'Ngữ pháp hay xuất hiện trong đề thi', th: 'Tổng hợp ngữ pháp N1 (Thaolejp)', cn: 'Cẩm nang ngữ pháp N1 (Thaolejp)', try: 'TRY! N1 – 123 mẫu theo bài đọc (OCR từ sách)' };
+const GSETS = { book: 'Ngữ pháp N1 (giáo trình, 22 chương)', freq: 'Ngữ pháp hay xuất hiện trong đề thi', th: 'Tổng hợp ngữ pháp N1', cn: 'Cẩm nang ngữ pháp N1', try: 'TRY! N1 – 123 mẫu theo bài đọc (OCR từ sách)' };
 on(/^\/grammar$/, async (q) => {
   const G = await load('grammar');
   main.innerHTML = `<a class="crumb" href="#/skill/grammar">‹ Ngữ pháp</a><h1>${q.set ? esc(GSETS[q.set] || 'Ngữ pháp') : 'Tra cứu ngữ pháp'}</h1>
@@ -705,7 +705,7 @@ on(/^\/exam$/, async () => {
   main.innerHTML = `<h1>Thi thử</h1><p class="lead">Làm đề hoàn chỉnh như thi thật. Muốn luyện riêng từng kỹ năng hoặc từng dạng câu, vào mục <a href="#/learn">Học</a>.</p>
   <div class="grid-hub">
     <a class="hub" href="#real"><span class="glyph">本</span><div><h3>Đề thật JLPT N1</h3><p>${P.length} kỳ thi 2010–2025 · đọc + nghe</p></div></a>
-    <a class="hub" href="#/tests?set=${encodeURIComponent(mockSets[0] || '')}"><span class="glyph">模</span><div><h3>Đề thi thử</h3><p>36 đề Thaolejp + đề test đầu vào</p></div></a>
+    <a class="hub" href="#/tests?set=${encodeURIComponent(mockSets[0] || '')}"><span class="glyph">模</span><div><h3>Đề thi thử</h3><p>36 đề + đề test đầu vào</p></div></a>
     <a class="hub" href="#/mock"><span class="glyph">試</span><div><h3>Đề tự sinh ngẫu nhiên</h3><p>Trộn từ kho từ vựng, kanji, ngữ pháp, đọc hiểu</p></div></a>
   </div>
   <h2 id="real">Đề thật theo kỳ thi</h2>

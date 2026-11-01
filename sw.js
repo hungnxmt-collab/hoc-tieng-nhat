@@ -1,4 +1,4 @@
-const V='n1-v13';
+const V='n1-v14';
 const CORE=['./','index.html','styles.css','app.js','manifest.webmanifest','icon.svg','data/vocab.json','data/kanji.json','data/grammar.json','data/reading.json','data/plan.json'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(CORE)));self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))));self.clients.claim();});

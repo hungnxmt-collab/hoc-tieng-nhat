@@ -9,13 +9,13 @@ Web app chạy trên máy tính và điện thoại (cài được lên màn hì
 
 ## Tính năng
 - **Ôn tập thẻ lặp lại ngắt quãng (SRS)**: từ vựng, kanji, ngữ pháp — tự tính ngày ôn tiếp theo.
-- **Từ vựng** (hơn 8.000 thẻ): Chinh phục từ vựng N1 (2.218 từ / 111 bài, có dịch câu ví dụ), 8 chuyên đề Thaolejp (phó từ, từ nối, cụm từ thay thế trong đề, động từ ghép, kanji đọc đặc biệt, 130 kanji khó, tiền tố, hậu tố, kanji dễ nhầm), 1.157 từ N1 FULL 10.2024 (Dũng Mori, 46 mục, câu ví dụ có dịch), 1.169 từ N1 tổng hợp (24 bài), 714 từ N1 Trainingbook (theo ngày), từ vựng tiếp khách nhà hàng, và từ bạn tự thêm.
+- **Từ vựng** (hơn 8.000 thẻ): Chinh phục từ vựng N1 (2.218 từ / 111 bài, có dịch câu ví dụ), 8 chuyên đề (phó từ, từ nối, cụm từ thay thế trong đề, động từ ghép, kanji đọc đặc biệt, 130 kanji khó, tiền tố, hậu tố, kanji dễ nhầm), 1.157 từ N1 FULL 10.2024 (, 46 mục, câu ví dụ có dịch), 1.169 từ N1 tổng hợp (24 bài), 714 từ N1 Trainingbook (theo ngày), từ vựng tiếp khách nhà hàng, và từ bạn tự thêm.
 - **Kanji N1**: 315 chữ / 21 chương, có âm Hán Việt, On/Kun, ví dụ, mẹo nhớ.
 - **Ngữ pháp** (683 mục): 106 mẫu theo giáo trình + 30 mẫu hay xuất hiện + Tổng hợp ngữ pháp N1 (201 mẫu) + Cẩm nang ngữ pháp N1 (346 mục), kèm bài giảng Mizuna cho một số mẫu.
-- **Lộ trình 28 tuần** (lớp N1 Dũng Mori): đánh dấu từng buổi, liên kết thẳng đến bài từ vựng / kanji / ngữ pháp / đọc hiểu.
+- **Lộ trình 28 tuần** (lớp N1): đánh dấu từng buổi, liên kết thẳng đến bài từ vựng / kanji / ngữ pháp / đọc hiểu.
 - **Hiragana / Katakana**: bảng chữ và trắc nghiệm, ưu tiên chữ hay sai.
-- **Đọc hiểu**: 156 bài (gồm 100 bài đọc hiểu N1 Thaolejp) (短文, 中文, 長文, 比較, 検索) với 145 câu hỏi có đáp án, xem kèm bản gốc.
-- **Đề thi đầy đủ**: 37 đề Thaolejp (36 đề thi thử + đề test đầu vào) và đề JLPT N1 12/2021 — 2.665 câu có đáp án; thi có giờ 110 phút hoặc luyện tập từng câu.
+- **Đọc hiểu**: 156 bài (gồm 100 bài đọc hiểu N1) (短文, 中文, 長文, 比較, 検索) với 145 câu hỏi có đáp án, xem kèm bản gốc.
+- **Đề thi đầy đủ**: 37 đề (36 đề thi thử + đề test đầu vào) và đề JLPT N1 12/2021 — 2.665 câu có đáp án; thi có giờ 110 phút hoặc luyện tập từng câu.
 - **Đề JLPT N1 thật 2010–2018** (18 đề, 1.262 câu, bản scan): nhận dạng chữ (OCR) từng đề, tách đúng 13 問題; đáp án đọc thủ công từ bảng đáp án chính thức và đối chiếu với OCR. Xem dạng ảnh đề gốc (cắt theo từng câu/đoạn) hoặc dạng chữ.
 - **Nghe**: 10 phần nghe từ vựng N1 (≈5 giờ) và 41 track TRY! N1, có bản chép lời tự động (SenseVoice) chạy theo âm thanh; nhớ vị trí đang nghe, chỉnh tốc độ 0.75–1.5×.
 - **Audio gốc cho thẻ từ vựng**: 2.167 từ Chinh phục từ vựng N1 phát đúng đoạn từ và câu ví dụ trong file nghe.
