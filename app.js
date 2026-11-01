@@ -1118,7 +1118,7 @@ route();
 if (GH.ok()) sync();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   const had = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.register('sw.js').then(r => { r.update(); setInterval(() => r.update(), 30 * 60 * 1000); });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => { r.update(); setInterval(() => r.update(), 10 * 60 * 1000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') r.update(); }); });
   // có phiên bản mới → tự tải lại một lần
   let reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded) { reloaded = true; location.reload(); } });
