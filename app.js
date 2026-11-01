@@ -15,7 +15,7 @@ const ICON = {
 
 /* ---------------- state (lưu localStorage + GitHub) ---------------- */
 const LS_STATE = 'n1.state.v1', LS_CFG = 'n1.github.v1';
-const emptyState = () => ({ v: 1, updated: 0, srs: {}, active: {}, log: {}, exams: [], kana: {}, custom: [], plan: {}, settings: { newPerDay: 20, theme: 'auto', planStart: '' } });
+const emptyState = () => ({ v: 1, updated: 0, srs: {}, active: {}, log: {}, exams: [], kana: {}, custom: [], plan: {}, tq: {}, settings: { newPerDay: 20, theme: 'auto', planStart: '', examDate: '', hotFirst: true } });
 let S = (() => { try { return Object.assign(emptyState(), JSON.parse(localStorage.getItem(LS_STATE)) || {}); } catch { return emptyState(); } })();
 let CFG = (() => { try { return JSON.parse(localStorage.getItem(LS_CFG)) || {}; } catch { return {}; } })();
 function save(dirty = true) {
@@ -69,19 +69,23 @@ async function buildItem(key) {
 }
 async function activeNewKeys() {
   const keys = [];
+  if (S.active['hot:v']) keys.push(...await hotKeys('v'));
+  if (S.active['hot:g']) keys.push(...await hotKeys('g'));
   const ds = await decks(), K = await load('kanji'), G = await load('grammar');
   for (const d of ds) if (S.active['v:' + d.id]) for (const i of d.items) keys.push(cid('v', i.id));
   const chs = Object.keys(S.active).filter(k => k.startsWith('k:')).map(k => +k.slice(2));
   for (const k of K) if (chs.includes(k.ch)) keys.push(cid('k', k.id));
   for (const g of G) if (S.active['g:' + g.set]) keys.push(cid('g', g.id));
-  return keys.filter(k => !S.srs[k]);
+  return [...new Set(keys)].filter(k => !S.srs[k]);
 }
 async function queueToday() {
   const now = Date.now();
   const due = Object.entries(S.srs).filter(([, c]) => c.due <= now + 0).sort((a, b) => a[1].due - b[1].due).map(([k]) => k);
   const doneNew = (S.log[todayKey()] || {}).neu || 0;
   const room = Math.max(0, (S.settings.newPerDay | 0) - doneNew);
-  const fresh = (await activeNewKeys()).slice(0, room);
+  let fresh = await activeNewKeys();
+  if (S.settings.hotFirst !== false) { await loadFreq(); fresh = fresh.map((k, i) => [k, i, hotOf(k)]).sort((a, b) => b[2] - a[2] || a[1] - b[1]).map(x => x[0]); }
+  fresh = fresh.slice(0, room);
   return { due, fresh };
 }
 
@@ -167,6 +171,7 @@ function merge(a, b) { // gộp 2 trạng thái, giữ bản mới hơn cho từ
   out.kana = { ...a.kana }; for (const [k, v] of Object.entries(b.kana || {})) { const o = out.kana[k]; if (!o || v.n > o.n) out.kana[k] = v; }
   const cu = new Map(); for (const c of [...(a.custom || []), ...(b.custom || [])]) cu.set(c.id, c); out.custom = [...cu.values()];
   out.plan = { ...(a.plan || {}) }; for (const [k, v] of Object.entries(b.plan || {})) if (!out.plan[k] || (v.t || 0) > (out.plan[k].t || 0)) out.plan[k] = v;
+  out.tq = { ...(a.tq || {}) }; for (const [k, v] of Object.entries(b.tq || {})) if (!out.tq[k] || (v.t || 0) > (out.tq[k].t || 0)) out.tq[k] = v;
   out.updated = Math.max(a.updated || 0, b.updated || 0);
   return out;
 }
@@ -326,10 +331,14 @@ on(/^\/today$/, async () => {
       <div class="muted small">Hôm nay: ${t.rev} lượt ôn · ${t.neu} thẻ mới · ${t.rev ? Math.round(100 * t.ok / t.rev) : 0}% nhớ</div></div>
     </section>
   </div>
+  ${await countdownHTML()}
+  ${weakHTML(true)}
   ${await todayPlanHTML()}
   <h2>Học theo kỹ năng</h2>
   <div class="quick">${Object.entries(SKILLS).map(([k, v]) => `<a href="#/skill/${k}"><span class="glyph">${v.glyph}</span><b>${v.name}</b></a>`).join('')}<a href="#/exam"><span class="glyph">試</span><b>Thi thử</b></a></div>
+  ${(() => { const n = Object.entries(S.srs).filter(([, c]) => c.mis && c.due <= Date.now()).length; return n ? `<div class="status info" style="margin-top:16px">Có <b>${n}</b> thẻ từ câu làm sai đang chờ ôn. <a href="#/review?mis=1">Ôn ngay</a> · <a href="#/mistakes">Sổ lỗi sai</a></div>` : ''; })()}
   ${!GH.ok() ? `<div class="status info" style="margin-top:20px">Tiến độ đang chỉ lưu trên thiết bị này. <a href="#/settings">Kết nối GitHub</a> để lưu lên GitHub và dùng chung giữa máy tính và điện thoại.</div>` : ''}`;
+  bindCountdownSet();
 });
 
 /* ---------------- Học theo kỹ năng ---------------- */
@@ -414,6 +423,9 @@ on(/^\/learn$/, async () => {
   <div class="grid-hub">
     <a class="hub" href="#/plan"><span class="glyph">道</span><div><h3>Lộ trình 28 tuần</h3><p>Lịch học từng buổi, liên kết đến bài cần học</p></div></a>
     <a class="hub" href="#/kana"><span class="glyph">あ</span><div><h3>Hiragana / Katakana</h3><p>Bảng chữ và trắc nghiệm</p></div></a>
+    <a class="hub" href="#/hot"><span class="glyph">🔥</span><div><h3>Hay ra thi</h3><p>Từ & ngữ pháp đã được hỏi trong đề thật — học trước</p></div></a>
+    <a class="hub" href="#/countdown"><span class="glyph">暦</span><div><h3>Đếm ngược ngày thi</h3><p>${S.settings.examDate ? 'Thi ' + new Date(S.settings.examDate + 'T00:00:00').toLocaleDateString('vi-VN') : 'Đặt ngày thi để chia mục tiêu'}</p></div></a>
+    <a class="hub" href="#/mistakes"><span class="glyph">誤</span><div><h3>Sổ lỗi sai</h3><p>Câu sai trong đề → thẻ ôn tự động</p></div></a>
   </div>`;
 });
 const step = (n, title, sub, body) => `<section class="step"><div class="step-h"><span class="step-n">${n}</span><div><h2>${title}</h2>${sub ? `<p class="muted small">${sub}</p>` : ''}</div></div>${body}</section>`;
@@ -438,7 +450,7 @@ on(/^\/skill\/(\w+)$/, async (id) => {
     html += `<p class="lead">Học theo bộ, bấm “Học bài này” ở từng bài để đưa vào lịch ôn. Đã học ${st.l}/${st.n.toLocaleString('vi')} từ, thuộc ${st.m}.</p>
     ${step(1, 'Học từ mới', 'Các bộ từ vựng, xếp theo thứ tự nên học', `<div class="list">${groups.map((g, i) => { const gd = ds.filter(d => d.group === g); const p = deckProgress('v:', gd.flatMap(d => d.items.map(x => x.id)));
       return tile(`#/vocab?g=${encodeURIComponent(g)}`, String(i + 1), esc(g), `${VOC_NOTE[g] ? esc(VOC_NOTE[g]) + ' · ' : ''}${gd.length} bài · ${p.n} từ · đã học ${p.l}`, gd.some(d => S.active['v:' + d.id]) ? '<span class="tag on">Đang học</span>' : ''); }).join('')}
-      ${tile('#/vocab', '🔍', 'Tra cứu tất cả từ', 'Tìm theo chữ, cách đọc hoặc nghĩa')}${tile('#/addword', '＋', 'Thêm từ của bạn', 'Lưu cùng tiến độ lên GitHub')}</div>`)}
+      ${tile('#/hot?t=v', '🔥', 'Từ hay ra thi', 'Từ đã được hỏi trực tiếp trong đề thật — nên thuộc trước', S.active['hot:v'] ? '<span class="tag on">Đang học</span>' : '')}${tile('#/vocab', '🔍', 'Tra cứu tất cả từ', 'Tìm theo chữ, cách đọc hoặc nghĩa')}${tile('#/addword', '＋', 'Thêm từ của bạn', 'Lưu cùng tiến độ lên GitHub')}</div>`)}
     ${step(2, 'Ôn tập', '', `<div class="list">${tile('#/review?skill=v', '復', `Ôn từ vựng hôm nay`, `${nToday} thẻ đến hạn / mới`)}${tile('#/audio', '聴', 'Nghe từ vựng', '5 giờ Chinh phục từ vựng + 70 bài 単語3000, có chép lời')}</div>`)}
     ${step(3, 'Luyện dạng đề JLPT', 'Câu hỏi lấy từ đề thật và đề thi thử', await drillList(s.types))}
     ${step(4, 'Bài tập thêm', '', `<div class="list">${setList(I, /Test từ vựng/)}</div>`)}`;
@@ -457,7 +469,7 @@ on(/^\/skill\/(\w+)$/, async (id) => {
     html += `<p class="lead">${G.length} mẫu ngữ pháp từ 5 nguồn. Đã học ${st.l}, thuộc ${st.m}.</p>
     ${step(1, 'Học mẫu ngữ pháp', 'Theo thứ tự nên học', `<div class="list">${order.map(([k, note], i) => { const gs = G.filter(g => g.set === k); const p = deckProgress('g:', gs.map(g => g.id));
       return tile(`#/grammar?set=${k}`, String(i + 1), esc(GSETS[k]), `${note} · ${gs.length} mẫu · đã học ${p.l}`, S.active['g:' + k] ? '<span class="tag on">Đang học</span>' : ''); }).join('')}
-      ${tile('#/try', 'T', 'Sách TRY! N1', '10 bài đọc/nghe → ngữ pháp, xem trang gốc')}${tile('#/keigo', '敬', 'Kính ngữ', '34 động từ 尊敬語・謙譲語, quy tắc, trắc nghiệm')}${tile('#/grammar', '🔍', 'Tra cứu tất cả mẫu', '')}</div>`)}
+      ${tile('#/hot?t=g', '🔥', 'Ngữ pháp hay ra thi', 'Mẫu đã xuất hiện trong lựa chọn 問題5–7 của đề thật', S.active['hot:g'] ? '<span class="tag on">Đang học</span>' : '')}${tile('#/try', 'T', 'Sách TRY! N1', '10 bài đọc/nghe → ngữ pháp, xem trang gốc')}${tile('#/keigo', '敬', 'Kính ngữ', '34 động từ 尊敬語・謙譲語, quy tắc, trắc nghiệm')}${tile('#/grammar', '🔍', 'Tra cứu tất cả mẫu', '')}</div>`)}
     ${step(2, 'Ôn tập', '', `<div class="list">${tile('#/review?skill=g', '復', 'Ôn ngữ pháp hôm nay', `${nToday} thẻ đến hạn / mới`)}</div>`)}
     ${step(3, 'Luyện dạng đề JLPT', '', await drillList(s.types))}
     ${step(4, 'Bài tập thêm', '', `<div class="list">${setList(I, /Cẩm nang|TRY|Test từ vựng-ngữ pháp N1$/)}</div>`)}`;
@@ -490,6 +502,7 @@ on(/^\/ldrill$/, async (q) => {
 /* ---------------- Từ vựng ---------------- */
 function deckProgress(prefix, ids) { let l = 0, m = 0; for (const id of ids) { const c = S.srs[prefix + id]; if (c) { l++; if (isMastered(c)) m++; } } return { l, m, n: ids.length }; }
 on(/^\/vocab$/, async (q) => {
+  await loadFreq();
   const ds = await decks();
   const groups = [...new Set(ds.map(d => d.group))].filter(g => !q.g || g === q.g);
   main.innerHTML = `<a class="crumb" href="#/skill/vocab">‹ Từ vựng</a><h1>${q.g ? esc(q.g) : 'Tra cứu từ vựng'}</h1>
@@ -514,9 +527,10 @@ on(/^\/vocab$/, async (q) => {
 const exHTML = (i, n) => (i.ex || []).slice(0, n).map((e, k) => `<div class="ex">${sayT(e)}${i.exvi?.[k] ? `<div class="exvi">${esc(i.exvi[k])}</div>` : ''}</div>`).join('');
 function wordRow(i) {
   return `<div class="word"><div><div class="w">${sayT(i.w, i.r || i.w)}</div><div class="r">${i.r ? sayT(i.r) : ''}${i.hv ? ' · ' + esc(i.hv) : ''}</div></div>
-  <div class="m">${esc(i.m)}${i.chk ? ' <span class="tag warn" title="Chữ nhận dạng tự động chưa khớp từ điển — hãy xem ảnh gốc">cần đối chiếu</span>' : ''}${exHTML(i, 2)}${(i.rel || []).map(r => `<div class="small muted">＋ <span class="jp">${esc(r)}</span></div>`).join('')}${i.img ? `<details class="small"><summary>Xem bản gốc</summary><img loading="lazy" src="${i.img}" alt="Mục từ trong sách" style="width:100%;max-width:640px;margin-top:4px;border:1px solid var(--line)"></details>` : ''}</div>${vSay(i)}</div>`;
+  <div class="m">${esc(i.m)}${hotTag('v:' + i.id)}${i.chk ? ' <span class="tag warn" title="Chữ nhận dạng tự động chưa khớp từ điển — hãy xem ảnh gốc">cần đối chiếu</span>' : ''}${exHTML(i, 2)}${(i.rel || []).map(r => `<div class="small muted">＋ <span class="jp">${esc(r)}</span></div>`).join('')}${i.img ? `<details class="small"><summary>Xem bản gốc</summary><img loading="lazy" src="${i.img}" alt="Mục từ trong sách" style="width:100%;max-width:640px;margin-top:4px;border:1px solid var(--line)"></details>` : ''}</div>${vSay(i)}</div>`;
 }
 on(/^\/vocab\/([\w-]+)$/, async (id) => {
+  await loadFreq();
   const d = (await decks()).find(x => x.id === id); if (!d) throw new Error('Không tìm thấy bài');
   const act = !!S.active['v:' + id];
   const p = deckProgress('v:', d.items.map(i => i.id));
@@ -565,12 +579,12 @@ on(/^\/kanji\/(\d+)$/, async (c) => {
 /* ---------------- Ngữ pháp ---------------- */
 const GSETS = { book: 'Ngữ pháp N1 (giáo trình, 22 chương)', freq: 'Ngữ pháp hay xuất hiện trong đề thi', th: 'Tổng hợp ngữ pháp N1', cn: 'Cẩm nang ngữ pháp N1', try: 'TRY! N1 – 123 mẫu theo bài đọc (OCR từ sách)' };
 on(/^\/grammar$/, async (q) => {
-  const G = await load('grammar');
+  const G = await load('grammar'); await loadFreq();
   main.innerHTML = `<a class="crumb" href="#/skill/grammar">‹ Ngữ pháp</a><h1>${q.set ? esc(GSETS[q.set] || 'Ngữ pháp') : 'Tra cứu ngữ pháp'}</h1>
   <input class="search" id="gs" type="search" placeholder="Tìm mẫu ngữ pháp hoặc nghĩa…" aria-label="Tìm ngữ pháp">
   ${Object.entries(GSETS).filter(([s]) => !q.set || s === q.set).map(([s, name]) => { const gs = G.filter(g => g.set === s); const act = !!S.active['g:' + s]; const p = deckProgress('g:', gs.map(g => g.id));
     const grps = [...new Set(gs.map(g => g.grp || ''))];
-    const itemsHTML = grps.map(gr => `${gr ? `<div class="subgrp">${esc(gr)}</div>` : ''}<div class="list">${gs.filter(g => (g.grp || '') === gr).map(g => `<a class="item gi" href="#/grammar/${g.id}" data-s="${esc((g.title + ' ' + g.mean).toLowerCase())}"><div class="body"><b class="jp">${esc(g.title)}</b>${S.srs['g:' + g.id] ? ` <span class="tag ${isMastered(S.srs['g:' + g.id]) ? 'on' : ''}">${isMastered(S.srs['g:' + g.id]) ? 'Đã thuộc' : 'Đang học'}</span>` : ''}<div class="sub">${esc(g.mean.split(' • ').slice(0, 2).join(' • '))}</div></div></a>`).join('')}</div>`).join('');
+    const itemsHTML = grps.map(gr => `${gr ? `<div class="subgrp">${esc(gr)}</div>` : ''}<div class="list">${gs.filter(g => (g.grp || '') === gr).map(g => `<a class="item gi" href="#/grammar/${g.id}" data-s="${esc((g.title + ' ' + g.mean).toLowerCase())}"><div class="body"><b class="jp">${esc(g.title)}</b>${hotTag('g:' + g.id)}${S.srs['g:' + g.id] ? ` <span class="tag ${isMastered(S.srs['g:' + g.id]) ? 'on' : ''}">${isMastered(S.srs['g:' + g.id]) ? 'Đã thuộc' : 'Đang học'}</span>` : ''}<div class="sub">${esc(g.mean.split(' • ').slice(0, 2).join(' • '))}</div></div></a>`).join('')}</div>`).join('');
     return `<details class="grp gset" ${s === 'book' || act || q.set ? 'open' : ''}><summary class="row" style="margin:20px 0 8px"><b>${name}</b><span class="muted small">${gs.length} mẫu · đã học ${p.l}</span><span class="spacer"></span>
     <button class="btn sm ${act ? '' : 'primary'}" data-tog="${s}">${act ? 'Ngừng học' : 'Học phần này'}</button><a class="btn sm" href="#/review?deck=g:${s}&mode=browse">Lật thẻ</a></summary>
     ${itemsHTML}</details>`; }).join('')}`;
@@ -657,7 +671,7 @@ function cardHTML(x, flipped) {
   const it = x.it;
   if (x.type === 'v') {
     const long = it.w.length > 7;
-    return `<span class="kind tag">Từ vựng</span><span class="say">${vSay(it)}</span>
+    return `<span class="kind tag">Từ vựng</span>${hotTag(x.key)}<span class="say">${vSay(it)}</span>
       <div class="front ${long ? 'long' : ''}">${esc(it.w)}</div>
       ${flipped ? `<div class="back">${it.r ? `<div class="reading">${esc(it.r)}</div>` : ''}${it.hv ? `<div class="hv">${esc(it.hv)}</div>` : ''}
       <div class="meaning">${esc(it.m)}</div>${(it.ex || []).length ? `<ul class="exs">${it.ex.slice(0, 3).map((e, k) => `<li>${esc(e)}${it.exvi?.[k] ? `<div class="exvi">${esc(it.exvi[k])}</div>` : ''}</li>`).join('')}</ul>` : ''}</div>` : ''}`;
@@ -668,7 +682,7 @@ function cardHTML(x, flipped) {
       <div class="small">On: <span class="jp">${sayList(it.on)}</span> · Kun: <span class="jp">${sayList(it.kun)}</span></div>
       <ul class="exs">${it.ex.map((e, i) => `<li>${sayT(e)}${exVi(it, i)}</li>`).join('')}</ul>${it.tip ? `<div class="note">💡 <span class="jp">${sayT(it.tip)}</span>${it.tipm ? `<div class="tipvi">→ ${esc(it.tipm)}</div>` : ''}</div>` : ''}</div>` : ''}`;
   }
-  return `<span class="kind tag">Ngữ pháp</span><div class="front long">${esc(it.title)}</div>
+  return `<span class="kind tag">Ngữ pháp</span>${hotTag(x.key)}<div class="front long">${esc(it.title)}</div>
     ${flipped ? `<div class="back"><div class="note" style="width:100%">${grammarBody(it)}</div></div>` : ''}`;
 }
 on(/^\/review$/, async (q) => {
@@ -680,11 +694,14 @@ on(/^\/review$/, async (q) => {
     if (t === 'k') keys = (await load('kanji')).filter(k => k.ch === +id).map(k => 'k:' + k.id);
     if (t === 'g') keys = (await load('grammar')).filter(g => g.set === id).map(g => 'g:' + g.id);
     keys = shuffle(keys);
-  } else { const { due, fresh } = await queueToday(); keys = [...due, ...shuffle(fresh)]; if (q.skill) keys = keys.filter(k => k.startsWith(q.skill + ':')); }
+  } else if (q.hot) { keys = await hotKeys(q.hot); }
+  else if (q.mis) { keys = Object.entries(S.srs).filter(([, c]) => c.mis && c.due <= Date.now()).sort((a, b) => a[1].due - b[1].due).map(([k]) => k); }
+  else { const { due, fresh } = await queueToday(); keys = [...due, ...shuffle(fresh)]; if (q.skill) keys = keys.filter(k => k.startsWith(q.skill + ':')); }
+  await loadFreq();
   const queue = [];
   for (const k of keys) { const b = await buildItem(k); if (b) queue.push(b); }
   const total = queue.length; let done = 0, flipped = false, cur = null; const seenNew = new Set();
-  const back = q.deck ? (q.deck[0] === 'v' ? `#/vocab/${q.deck.slice(2)}` : q.deck[0] === 'k' ? `#/kanji/${q.deck.slice(2)}` : `#/grammar?set=${q.deck.slice(2)}`) : q.skill ? `#/skill/${{ v: 'vocab', k: 'kanji', g: 'grammar' }[q.skill]}` : '#/today';
+  const back = q.hot ? `#/hot?t=${q.hot}` : q.mis ? '#/mistakes' : q.deck ? (q.deck[0] === 'v' ? `#/vocab/${q.deck.slice(2)}` : q.deck[0] === 'k' ? `#/kanji/${q.deck.slice(2)}` : `#/grammar?set=${q.deck.slice(2)}`) : q.skill ? `#/skill/${{ v: 'vocab', k: 'kanji', g: 'grammar' }[q.skill]}` : '#/today';
   if (!total) { main.innerHTML = `<div class="done"><div class="hanko"><div><b>済</b><span>xong</span></div></div><h1>Không còn thẻ nào</h1><p class="lead">Hãy chọn thêm bài trong mục Học.</p><a class="btn primary" href="#/learn">Đến mục Học</a></div>`; return; }
   function render() {
     if (!queue.length) {
@@ -795,12 +812,14 @@ on(/^\/exam$/, async () => {
     <a class="hub" href="#real"><span class="glyph">本</span><div><h3>Đề thật JLPT N1</h3><p>${P.length} kỳ thi 2010–2025 · đọc + nghe</p></div></a>
     <a class="hub" href="#/tests?set=${encodeURIComponent(mockSets[0] || '')}"><span class="glyph">模</span><div><h3>Đề thi thử</h3><p>36 đề + đề test đầu vào</p></div></a>
     <a class="hub" href="#/mock"><span class="glyph">試</span><div><h3>Đề tự sinh ngẫu nhiên</h3><p>Trộn từ kho từ vựng, kanji, ngữ pháp, đọc hiểu</p></div></a>
+    <a class="hub hl" href="#/jlpt"><span class="glyph">合</span><div><h3>Thi thật mô phỏng</h3><p>Đủ 2 phần như ngày thi · quy đổi điểm · báo đậu/trượt</p></div></a>
+    <a class="hub" href="#/mistakes"><span class="glyph">誤</span><div><h3>Sổ lỗi sai</h3><p>${Object.values(S.tq).filter(v => !v.ok).length} câu sai · làm lại, ôn từ liên quan</p></div></a>
   </div>
   <h2 id="real">Đề thật theo kỳ thi</h2>
   <p class="small muted">Phần 1 “Kiến thức + Đọc” 110 phút · Phần 2 “Nghe” ~55 phút. “Luyện” = xem đáp án ngay từng câu; “Thi” = tính giờ, chấm khi nộp.</p>
   <div class="list">${P.map(p => `<div class="item exrow"><div class="glyph" style="font-size:.85rem;font-family:var(--ui)">${+p.ym.slice(5)}/${p.ym.slice(2, 4)}</div>
     <div class="body"><b>Tháng ${+p.ym.slice(5)}/${p.ym.slice(0, 4)}</b><div class="sub">${p.read ? (p.read.paper ? 'làm trên đề gốc' : p.read.id.startsWith('jr') ? 'bản scan' : 'bản chữ') : ''}${p.listen ? ' · có audio nghe' : ' · chưa có phần nghe'}</div></div>
-    <div class="exbtns">${p.read ? `<div><span class="small muted">Đọc ${pct(p.read.id)}</span><a class="btn sm" href="#/test/${p.read.id}?mode=practice">Luyện</a><a class="btn sm primary" href="#/test/${p.read.id}?mode=timed">Thi 110′</a></div>` : ''}
+    <div class="exbtns">${p.read && p.listen ? `<div><a class="btn sm ghost" href="#/jlpt/${p.ym}" title="Làm cả 2 phần, quy đổi điểm, báo đậu/trượt">合 Thi trọn bộ</a></div>` : ''}${p.read ? `<div><span class="small muted">Đọc ${pct(p.read.id)}</span><a class="btn sm" href="#/test/${p.read.id}?mode=practice">Luyện</a><a class="btn sm primary" href="#/test/${p.read.id}?mode=timed">Thi 110′</a></div>` : ''}
     ${p.listen ? `<div><span class="small muted">Nghe ${pct(p.listen.id)}</span><a class="btn sm" href="#/test/${p.listen.id}?mode=practice">Luyện</a><a class="btn sm primary" href="#/test/${p.listen.id}?mode=timed">Thi 55′</a></div>` : ''}</div></div>`).join('')}</div>
   <h2>Đề thi thử & bài tập</h2>
   <div class="list">${[...new Set(I.filter(x => !realExamPairs([x]).length).map(x => x.set))].map(st => { const xs = I.filter(x => x.set === st);
@@ -882,14 +901,15 @@ on(/^\/audio$/, async (q) => {
   main.innerHTML = `<a class="crumb" href="#/learn">‹ Học</a><h1>Nghe</h1><p class="lead">Bấm một bài để phát. Ứng dụng nhớ chỗ bạn đang nghe ở từng bài và tự chuyển sang bài kế tiếp.</p>
   <div class="panel player"><div class="jp" id="now" style="font-weight:700"></div>
    <audio id="au" controls preload="metadata" style="width:100%;margin:10px 0"></audio>
-   <div class="row"><button class="btn sm" id="back">−10s</button><button class="btn sm" id="fwd">+10s</button><span class="spacer"></span><span class="small muted">Tốc độ</span><div class="seg" id="spd">${[0.75, 1, 1.25, 1.5].map(v => `<button data-v="${v}">${v}×</button>`).join('')}</div></div>
+   <div class="row"><button class="btn sm" id="back">−10s</button><button class="btn sm" id="fwd">+10s</button><button class="btn sm" id="prevS" title="Về đầu câu trước">‹ Câu</button><button class="btn sm" id="nextS" title="Sang câu sau">Câu ›</button><button class="btn sm" id="loopS" title="Lặp lại câu đang nghe để luyện shadowing">🔁 Lặp câu</button><span class="spacer"></span><span class="small muted">Tốc độ</span><div class="seg" id="spd">${[0.8, 0.9, 1, 1.1, 1.2, 1.5].map(v => `<button data-v="${v}">${v}×</button>`).join('')}</div></div>
+   <p class="small muted" id="loopInfo" hidden style="margin:6px 0 0">Đang lặp câu — nghe, dừng, nói đuổi theo (shadowing). Chạm một dòng chép lời để đổi câu lặp; bấm “Lặp câu” lần nữa để tắt.</p>
    <details class="tx-wrap" id="txw" open><summary class="small">Bản chép lời <span class="muted">(tự động — chạm một dòng để nghe từ đó)</span></summary><div class="transcript jp" id="tx"></div></details></div>
   ${A.map(g => `<h2>${esc(g.title)}</h2><p class="small muted">${esc(g.desc)}</p><div class="list">${g.tracks.map(t => `<a class="item track" href="javascript:void 0" data-f="${t.f}"><div class="glyph" style="font-size:.9rem;font-family:var(--ui)">▶</div><div class="body"><b>${esc(t.t)}</b><div class="sub">${fmt(t.d)}${pos[t.f] ? ' · đang nghe ở ' + fmt(pos[t.f]) : ''}</div></div></a>`).join('')}</div>`).join('')}`;
   const au = $('#au'); let rate = 1; try { rate = +localStorage.getItem('n1.rate') || 1; } catch { }
   const setRate = v => { rate = v; au.playbackRate = v; $$('#spd button').forEach(b => b.classList.toggle('on', +b.dataset.v === v)); try { localStorage.setItem('n1.rate', v); } catch { } };
   const savePos = () => { if (!cur) return; pos[cur.f] = au.currentTime > cur.d - 3 ? 0 : au.currentTime; pos._last = cur.f; try { localStorage.setItem(PK, JSON.stringify(pos)); } catch { } };
   const open = (t, play) => {
-    cur = t; au.src = t.f; $('#now').textContent = A.find(g => g.id === t.g).title + ' — ' + t.t;
+    cur = t; au.src = t.f; if (typeof loopK !== 'undefined' && loopK >= 0) { loopK = -1; $('#loopS')?.classList.remove('primary'); $('#loopInfo') && ($('#loopInfo').hidden = true); } $('#now').textContent = A.find(g => g.id === t.g).title + ' — ' + t.t;
     $('#tx').innerHTML = (t.seg || []).map((x, k) => `<p data-k="${k}">${esc(x[2])}</p>`).join('') || '<p class="muted">Không có bản chép lời.</p>'; $('#txw').hidden = !(t.seg || []).length; lastK = -1;
     $$('.track').forEach(a => a.classList.toggle('on', a.dataset.f === t.f));
     au.onloadedmetadata = () => { if (pos[t.f]) au.currentTime = pos[t.f]; au.playbackRate = rate; if (play) au.play().catch(() => { }); };
@@ -898,13 +918,20 @@ on(/^\/audio$/, async (q) => {
   $$('#spd button').forEach(b => b.onclick = () => setRate(+b.dataset.v));
   $('#back').onclick = () => au.currentTime = Math.max(0, au.currentTime - 10);
   $('#fwd').onclick = () => au.currentTime += 10;
+  let loopK = -1;
+  const segEnd = k => { const sg = cur.seg || []; return typeof sg[k]?.[1] === 'number' && sg[k][1] > sg[k][0] ? sg[k][1] : sg[k + 1]?.[0] ?? cur.d; };
+  const goSeg = k => { const sg = cur.seg || []; if (!sg.length) return toast('Bài này không có bản chép lời'); k = Math.max(0, Math.min(sg.length - 1, k)); if (loopK >= 0) loopK = k; au.currentTime = sg[k][0]; au.play().catch(() => { }); };
+  $('#prevS').onclick = () => goSeg((lastK < 0 ? 0 : au.currentTime - (cur.seg?.[lastK]?.[0] || 0) > 1.5 ? lastK : lastK - 1));
+  $('#nextS').onclick = () => goSeg(lastK + 1);
+  $('#loopS').onclick = () => { if (!(cur.seg || []).length) return toast('Bài này không có bản chép lời'); loopK = loopK >= 0 ? -1 : Math.max(0, lastK); $('#loopS').classList.toggle('primary', loopK >= 0); $('#loopInfo').hidden = loopK < 0; if (loopK >= 0) goSeg(loopK); };
   let last = 0, lastK = -1; au.ontimeupdate = () => {
     if (Date.now() - last > 4000) { last = Date.now(); savePos(); }
+    if (loopK >= 0 && au.currentTime >= segEnd(loopK) - 0.05) { au.currentTime = cur.seg[loopK][0]; }
     const sg = cur.seg || []; const ct = au.currentTime; let k = -1;
     for (let i = 0; i < sg.length; i++) { if (sg[i][0] <= ct + .05) k = i; else break; }
     if (k !== lastK) { lastK = k; $$('#tx p.on').forEach(p => p.classList.remove('on')); const p = k >= 0 && $(`#tx p[data-k="${k}"]`); if (p) { p.classList.add('on'); const box = $('#tx'); box.scrollTop = p.offsetTop - box.offsetTop - box.clientHeight / 3; } }
   };
-  $('#tx').onclick = e => { const p = e.target.closest('p[data-k]'); if (!p) return; au.currentTime = cur.seg[+p.dataset.k][0]; au.play().catch(() => { }); };
+  $('#tx').onclick = e => { const p = e.target.closest('p[data-k]'); if (!p) return; if (loopK >= 0) loopK = +p.dataset.k; au.currentTime = cur.seg[+p.dataset.k][0]; au.play().catch(() => { }); };
   au.onended = () => { pos[cur.f] = 0; savePos(); const i = all.indexOf(cur); if (all[i + 1] && all[i + 1].g === cur.g) open(all[i + 1], true); };
   au.onratechange = () => { if (au.playbackRate !== rate) setRate(au.playbackRate); };
   setRate(rate); open(cur, false);
@@ -1020,9 +1047,10 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
   const DK = 'n1.draft.' + id + (q.sec ? '.' + q.sec : ''); let draft = {}; try { draft = JSON.parse(localStorage.getItem(DK)) || {}; } catch { }
   let left = draft.left ?? LIM * 60, finished = false;
   main.innerHTML = `<div class="timer">${timed ? `<span class="clock" id="clk"></span><span class="muted small">còn lại</span>` : `<span class="muted small">Chế độ luyện tập — chọn đáp án để xem đúng/sai</span>`}<span class="spacer"></span><span class="small muted" id="cnt"></span>${timed ? '<button class="btn sm primary" id="sub">Nộp bài</button>' : ''}</div>
-  <a class="crumb" href="${q.sec && id.startsWith('ls') ? '#/skill/listening' : '#/exam'}">‹ ${q.sec && id.startsWith('ls') ? 'Nghe hiểu' : 'Thi thử'}</a><h1>${esc(E.title)}</h1><p class="muted">${esc(E.set)}${q.sec && id.startsWith('ls') ? ` · <a href="#/ldrill?type=${q.sec}">Đề khác cùng dạng ›</a>` : ''}</p>
+  <a class="crumb" href="${q.real ? '#/jlpt/' + q.real : q.sec && id.startsWith('ls') ? '#/skill/listening' : '#/exam'}">‹ ${q.real ? 'Thi thật mô phỏng' : q.sec && id.startsWith('ls') ? 'Nghe hiểu' : 'Thi thử'}</a><h1>${esc(E.title)}</h1>${q.real ? `<div class="status info">Thi thật mô phỏng · ${meta.listen ? 'Phần 2: Nghe hiểu' : 'Phần 1: Kiến thức ngôn ngữ + Đọc hiểu'} — làm như phòng thi, không xem đáp án giữa chừng.</div>` : ''}<p class="muted">${esc(E.set)}${q.sec && id.startsWith('ls') ? ` · <a href="#/ldrill?type=${q.sec}">Đề khác cùng dạng ›</a>` : ''}</p>
   ${E.scan ? `<div class="row" style="margin-bottom:8px"><div class="seg" id="scanmode"><button data-m="0" class="${scanTxt() ? '' : 'on'}">Ảnh đề gốc</button><button data-m="1" class="${scanTxt() ? 'on' : ''}">Chữ (nhận dạng OCR)</button></div></div><p class="small muted">Đề scan: “Ảnh đề gốc” hiển thị đúng bản in; “Chữ” là văn bản nhận dạng tự động (có thể sai vài chữ, câu nào tách lỗi vẫn hiện ảnh gốc). Đáp án đã đối chiếu thủ công với bảng đáp án chính thức.</p>` : ''}
   ${I.some(x => x.id === 'ls' + id.slice(2)) && !id.startsWith('ls') ? `<p><a class="btn sm" href="#/test/ls${id.slice(2)}?mode=practice">▶ Phần nghe hiểu của đề này</a></p>` : ''}
+  ${!timed && (E.audio || E.sections.some(x => x.au?.length)) ? auxBarHTML() : ''}
   ${E.audio ? `<div class="pq-au panel" style="margin-bottom:10px"><span class="small"><b>Toàn bộ bài nghe</b></span><audio controls preload="none" src="${E.audio}" style="flex:1"></audio></div>` : ''}
   ${E.paper ? `${E.note ? `<p class="small muted">${esc(E.note)}</p>` : ''}<p class="small muted">Đọc đề trên ảnh gốc, chọn đáp án trong phiếu trả lời${matchMedia('(max-width: 900px)').matches ? ' (nút “Phiếu trả lời” ở góc dưới)' : ' bên phải'}. ${E.sections.some(x => x.au) ? '' : 'Phần nghe hiểu không có file âm thanh nên không đưa vào.'}</p>
   <div class="paper"><div class="paper-pages">${E.paper.map((u, i) => `<img loading="${i < 2 ? 'eager' : 'lazy'}" src="${u}" alt="Trang ${i + 1}">`).join('')}</div>
@@ -1038,14 +1066,16 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
   $$('.opt', main).forEach(b => b.onclick = () => {
     const qe = b.closest('.q'); if (qe.classList.contains('graded')) return;
     $$('.opt', qe).forEach(x => x.classList.remove('sel')); b.classList.add('sel');
-    if (!timed) { gradeQs(main, [{ el: qe, answer: byN[qe.dataset.n].a, explain: byN[qe.dataset.n].note && esc(byN[qe.dataset.n].note) }]);
+    if (!timed) { const bq = byN[qe.dataset.n]; const good = gradeQs(main, [{ el: qe, answer: bq.a, explain: bq.note && esc(bq.note) }]);
+      recordQ(meta, bq, good).then(n => { save(); if (n) toast(`Câu sai → đã thêm ${n} thẻ vào ôn tập hôm nay`); });
       const gd = $$('.q.graded'); if (gd.length === all.length && !finished) { finished = true; const ok = gd.filter(x => $('.opt.right.sel', x)).length;
-        S.exams.push({ id: 'e' + Date.now(), at: Date.now(), title: E.title + ' (luyện tập)', test: id, score: ok, total: all.length, ...(q.sec && id.startsWith('ls') ? { ldrill: +q.sec } : {}) }); save();
+        S.exams.push({ id: 'e' + Date.now(), at: Date.now(), title: E.title + ' (luyện tập)', test: id, score: ok, total: all.length, tq: 1, ...(q.sec && id.startsWith('ls') ? { ldrill: +q.sec } : {}) }); save();
         toast(`Xong: đúng ${ok}/${all.length}`); } }
     else saveDraft();
     counter();
   });
   counter();
+  bindAux();
   if (E.paper) { $('#sheetbtn').onclick = () => $('#sheet').classList.add('open'); $('#sheetx').onclick = () => $('#sheet').classList.remove('open'); }
   $$('#scanmode button').forEach(b => b.onclick = () => { saveDraft(); try { localStorage.setItem('n1.scantxt', b.dataset.m); } catch { } cleanup && cleanup(); cleanup = null; route(); });
   if (timed) {
@@ -1055,18 +1085,20 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
     cleanup = () => { clearInterval(iv); if (!finished) saveDraft(); };
     const submit = () => {
       if (finished) return; finished = true; clearInterval(iv);
-      const groups = {}, secs = {}; let score = 0;
+      const groups = {}, secs = {}; let score = 0; const graded = [];
       for (const b of all) {
-        const el = $(`.q[data-n="${b.n}"]`); const ok = gradeQs(main, [{ el, answer: b.a, explain: b.note && esc(b.note) }]);
+        const el = $(`.q[data-n="${b.n}"]`); const ok = gradeQs(main, [{ el, answer: b.a, explain: b.note && esc(b.note) }]); graded.push([b, ok]);
         const g = JL ? SEC_GROUP(b.sec) : '問題' + b.sec; groups[g] ||= [0, 0]; groups[g][0] += ok; groups[g][1]++;
         const k = '問題' + b.sec; secs[k] ||= [0, 0]; secs[k][0] += ok; secs[k][1]++; score += ok;
       }
       const used = LIM * 60 - Math.max(0, left), pct = Math.round(100 * score / all.length);
-      S.exams.push({ id: 'e' + Date.now(), at: Date.now(), title: E.title, test: id, score, total: all.length, secs: groups, time: used }); save(); sync();
+      S.exams.push({ id: 'e' + Date.now(), at: Date.now(), title: E.title + (q.real ? ' (thi thật mô phỏng)' : ''), test: id, score, total: all.length, secs: groups, qs: secs, time: used, tq: 1, ...(q.real ? { real: q.real, part: meta.listen ? 'l' : 'r' } : {}) }); save();
+      (async () => { let n = 0; for (const [b, ok] of graded) n += await recordQ(meta, b, ok); save(); sync(); const m = $('#misnote'); if (m && n) m.innerHTML = `Đã thêm <b>${n}</b> thẻ từ vựng / ngữ pháp từ các câu sai vào ôn tập hôm nay. <a href="#/mistakes">Xem sổ lỗi sai</a>`; })();
       try { localStorage.removeItem(DK); } catch { }
       $('#result').innerHTML = `<h2>Kết quả</h2><div class="score"><div><b class="${pct >= 60 ? 'pass' : 'fail'}">${pct}%</b>${score}/${all.length} câu · ${fmt(used)}</div>${Object.entries(groups).map(([k, v]) => `<div><b>${v[0]}/${v[1]}</b><span class="jp">${k}</span></div>`).join('')}</div>
       <details class="box ${JL ? '' : 'hidden'}"><summary>Điểm từng 問題</summary><div class="score">${Object.entries(secs).map(([k, v]) => `<div><b>${v[0]}/${v[1]}</b><span class="jp">${k}</span></div>`).join('')}</div></details>
-      <p class="muted small">Đáp án đúng tô xanh, câu chọn sai tô đỏ. Cuộn lên để xem lại.</p><div class="row"><a class="btn primary" href="#/tests">Chọn đề khác</a><a class="btn" href="#/stats">Xem tiến độ</a></div>`;
+      <p class="muted small">Đáp án đúng tô xanh, câu chọn sai tô đỏ. Cuộn lên để xem lại.</p><p class="small" id="misnote"></p>
+      ${q.real ? `<div class="row"><a class="btn primary" href="#/jlpt/${q.real}">${meta.listen ? 'Xem kết quả kỳ thi' : 'Tiếp tục: Phần 2 Nghe hiểu ›'}</a></div>` : `<div class="row"><a class="btn primary" href="#/tests">Chọn đề khác</a><a class="btn" href="#/mistakes">Sổ lỗi sai</a><a class="btn" href="#/stats?weak=1">Bảng điểm yếu</a></div>`}`;
       $$('#sub,#sub2').forEach(b => b.disabled = true); $('#result').scrollIntoView({ behavior: 'smooth' });
     };
     $('#sub').onclick = $('#sub2').onclick = () => { const un = all.length - $$('.q').filter(x => $('.opt.sel', x)).length; if (!un || confirm(`Còn ${un} câu chưa trả lời. Nộp bài?`)) submit(); };
@@ -1085,12 +1117,12 @@ on(/^\/drill$/, async (q) => {
   let html = '', items = [];
   if (type <= 6) {
     const pool = [];
-    for (const id of ids.slice(0, 12)) { const E = await load('exams/' + id); const s = E.sections.find(z => z.no === type); if (s) for (const b of s.blocks) if (b.t === 'q') pool.push({ ...b, src: E.title }); }
+    for (const id of ids.slice(0, 12)) { const E = await load('exams/' + id); const s = E.sections.find(z => z.no === type); if (s) for (const b of s.blocks) if (b.t === 'q') pool.push({ ...b, src: E.title, tid: id, on: b.n, sec: type }); }
     items = pick(pool, 10).map((b, i) => ({ ...b, n: i + 1 }));
     html = items.map(b => testBlocks({ blocks: [b] }, 'd') + `<div class="muted small" style="margin-top:2px">${esc(b.src)}</div>`).join('');
   } else {
     const E = await load('exams/' + ids[0]); const s = E.sections.find(z => z.no === type);
-    items = s.blocks.filter(b => b.t === 'q'); html = `<p class="muted small">${esc(E.title)}</p>` + testBlocks(s, 'd');
+    items = s.blocks.filter(b => b.t === 'q').map(b => ({ ...b, tid: ids[0], sec: type })); html = `<p class="muted small">${esc(E.title)}</p>` + testBlocks(s, 'd');
   }
   const inst = items.length ? '' : '<p class="muted">Không có câu hỏi.</p>';
   main.innerHTML = `<a class="crumb" href="#/skill/${+q.type === 1 ? 'kanji' : +q.type <= 4 ? 'vocab' : +q.type <= 7 ? 'grammar' : 'reading'}">‹ ${+q.type === 1 ? 'Kanji' : +q.type <= 4 ? 'Từ vựng' : +q.type <= 7 ? 'Ngữ pháp' : 'Đọc hiểu'}</a><h1 class="jp">問題${type}　${esc(DRILL[type])}</h1>${inst}${html}
@@ -1099,9 +1131,10 @@ on(/^\/drill$/, async (q) => {
   $$('.opt', main).forEach(b => b.onclick = () => {
     const qe = b.closest('.q'); if (qe.classList.contains('graded')) return;
     b.classList.add('sel'); const it = items.find(x => 'd' + x.n === qe.dataset.n);
-    right += gradeQs(main, [{ el: qe, answer: it.a }]); done++;
+    const good = gradeQs(main, [{ el: qe, answer: it.a }]); right += good; done++;
+    const meta = I.find(x => x.id === it.tid); if (meta) recordQ(meta, it, good).then(n => { save(); if (n) toast(`Câu sai → đã thêm ${n} thẻ vào ôn tập`); });
     $('#res').innerHTML = `<b>Đúng ${right}/${done}</b>`;
-    if (done === items.length) { S.exams.push({ id: 'e' + Date.now(), at: Date.now(), title: 'Luyện dạng 問題' + type, score: right, total: done, drill: type }); save(); }
+    if (done === items.length) { S.exams.push({ id: 'e' + Date.now(), at: Date.now(), title: 'Luyện dạng 問題' + type, score: right, total: done, drill: type, tq: 1 }); save(); }
   });
   $('#again').onclick = () => route();
 });
@@ -1163,12 +1196,14 @@ on(/^\/stats$/, async () => {
     const learn = x.l != null ? `<div><b>${x.l}</b> đã học · <b>${x.m}</b> thuộc</div><div class="bar"><i style="width:${100 * x.m / Math.max(1, x.n)}%"></i></div>` : '';
     return `<a class="sk" href="#/skill/${k}"><span class="glyph">${v.glyph}</span><div><b>${v.name}</b>${learn}<div class="small muted">${x.acc != null ? `Luyện đề: đúng ${x.acc}%` : 'Chưa luyện đề dạng này'}</div></div></a>`; }).join('')}</div>`;
   main.innerHTML = `<h1>Tiến độ</h1><p class="lead">Chuỗi ${streak()} ngày · tổng ${totalRev} lượt ôn · nhớ ${totalRev ? Math.round(100 * totalOk / totalRev) : 0}%</p>
+  <h2 id="weak">Điểm yếu theo dạng đề</h2>${weakHTML(false)}
   ${skillHTML}
   <p class="muted small">“Thuộc” = thẻ có khoảng ôn từ 21 ngày trở lên.</p>
   <h2>Lịch học 18 tuần</h2><div class="panel heat"><svg width="${weeks * (cell + gap)}" height="${7 * (cell + gap)}">${rects}</svg>
   <div class="legend">Ít ${[0, 1, 2, 3, 4].map(l => `<svg width="12" height="12"><rect width="12" height="12" rx="2" fill="${['var(--surface-2)', '#b9d2a8', '#8cb873', '#5f9446', 'var(--moss)'][l]}"/></svg>`).join('')} Nhiều</div></div>
   <h2>Điểm đề thi thử</h2><div class="panel">${chart}</div>
   ${S.exams.length ? `<h2>Lịch sử làm bài</h2><div class="list">${S.exams.slice().reverse().slice(0, 30).map(examRow).join('')}</div>` : ''}`;
+  if (location.hash.includes('weak=1')) $('#weak')?.scrollIntoView();
 });
 
 /* ---------------- Cài đặt & đồng bộ ---------------- */
@@ -1186,6 +1221,8 @@ on(/^\/settings$/, async () => {
   </form>
   <h2>Học tập</h2>
   <div class="panel"><div class="field"><label for="npd">Số thẻ mới mỗi ngày</label><input id="npd" type="number" min="0" max="200" value="${S.settings.newPerDay}"></div>
+   <div class="field"><label class="chk"><input type="checkbox" id="hotf" ${S.settings.hotFirst !== false ? 'checked' : ''}> <span>Ưu tiên thẻ mới <b>hay ra thi</b> (từ/ngữ pháp đã xuất hiện trong đề thật được học trước)</span></label></div>
+   <div class="field"><label>Ngày thi</label><div class="row"><span>${S.settings.examDate ? new Date(S.settings.examDate + 'T00:00:00').toLocaleDateString('vi-VN') : 'Chưa đặt'}</span><a class="btn sm" href="#/countdown">Đặt / xem lộ trình đếm ngược</a></div></div>
    <div class="field"><label>Giao diện</label><div class="seg" id="theme">${[['auto', 'Theo hệ thống'], ['light', 'Sáng'], ['dark', 'Tối']].map(([k, l]) => `<button type="button" data-t="${k}" class="${S.settings.theme === k ? 'on' : ''}">${l}</button>`).join('')}</div></div></div>
   <h2>Sao lưu thủ công</h2>
   <div class="row"><button class="btn" id="exp">Tải file tiến độ (.json)</button><label class="btn">Nhập từ file<input type="file" id="imp" accept="application/json" class="hidden"></label></div>
@@ -1193,10 +1230,296 @@ on(/^\/settings$/, async () => {
   $('#gf').onsubmit = async e => { e.preventDefault(); CFG = { owner: $('#owner').value.trim(), repo: $('#repo').value.trim(), branch: $('#branch').value.trim() || 'userdata', path: $('#path').value.trim() || 'progress.json', token: $('#token').value.trim() }; localStorage.setItem(LS_CFG, JSON.stringify(CFG)); syncErr = null; await sync(true); };
   $('#now')?.addEventListener('click', () => sync(true));
   $('#out')?.addEventListener('click', () => { CFG = {}; localStorage.removeItem(LS_CFG); setPill(); route(); });
+  $('#hotf').onchange = e => { S.settings.hotFirst = e.target.checked; save(); toast('Đã lưu'); };
   $('#npd').onchange = e => { S.settings.newPerDay = Math.max(0, Math.min(200, +e.target.value || 0)); save(); toast('Đã lưu'); };
   $$('#theme button').forEach(b => b.onclick = () => { S.settings.theme = b.dataset.t; applyTheme(); save(); route(); });
   $('#exp').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' })); a.download = `tien-do-n1-${todayKey()}.json`; a.click(); };
   $('#imp').onchange = async e => { try { const d = JSON.parse(await e.target.files[0].text()); S = merge(S, d); save(); toast('Đã nhập dữ liệu'); route(); } catch { toast('File không hợp lệ'); } };
+});
+
+/* =====================================================================
+   6 tính năng luyện thi: sổ lỗi sai · điểm yếu · thi thật · hay ra thi · công cụ nghe · đếm ngược
+   ===================================================================== */
+// ---- Kết quả từng câu: S.tq['<mã đề>:<số câu>'] = {ok, s:'r3'|'l2', t, c:[thẻ đã thêm]}
+const qKind = (meta, sec) => meta.listen || meta.id.startsWith('ls') ? 'l' + sec : meta.fmt === 'jlpt' ? 'r' + sec : null;
+function logQ(meta, b, ok, cards) {
+  const s = qKind(meta, b.sec); if (!s) return;
+  const k = meta.id + ':' + (b.on || b.n), o = S.tq[k];
+  S.tq[k] = { ok: ok ? 1 : 0, s, t: Date.now(), ...(cards?.length ? { c: cards } : o?.c ? { c: o.c } : {}) };
+}
+const KIND_NAME = k => k[0] === 'l' ? `聴解 問題${k.slice(1)} · ${LTYPE[k.slice(1)]?.[0] || ''}` : `問題${k.slice(1)} · ${(DRILL[k.slice(1)] || '').split(' · ')[0]}`;
+const KIND_VI = k => k[0] === 'l' ? (LTYPE[k.slice(1)]?.[1] || '').split('.')[0] : (DRILL[k.slice(1)] || '').split(' · ')[1] || TYPE_TIP[k.slice(1)]?.split('.')[0] || '';
+const KIND_W = { r1: 6, r2: 7, r3: 6, r4: 6, r5: 10, r6: 5, r7: 5, r8: 4, r9: 9, r10: 4, r11: 3, r12: 4, r13: 2, l1: 6, l2: 7, l3: 6, l4: 14, l5: 4 };
+const PARTS = [['言語知識', 'Kiến thức ngôn ngữ', ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7']], ['読解', 'Đọc hiểu', ['r8', 'r9', 'r10', 'r11', 'r12', 'r13']], ['聴解', 'Nghe hiểu', ['l1', 'l2', 'l3', 'l4', 'l5']]];
+const kindPractice = k => k[0] === 'l' ? `#/ldrill?type=${k.slice(1)}` : `#/drill?type=${k.slice(1)}`;
+
+// ---- (1) Sổ lỗi sai: câu sai → thẻ từ vựng / ngữ pháp liên quan vào lịch ôn ngay
+let MIX = null;
+const vKey = w => re0(w).replace(/[\s　]/g, '');
+function re0(w) { return String(w).split(/[〈［\[（(／/・]/)[0].trim(); }
+async function mistakeIndex() {
+  if (MIX) return MIX;
+  const V = await allVocab(), G = await load('grammar');
+  const exact = new Map(), stem = new Map(), byR = new Map();
+  for (const v of V) {
+    if (!v.m) continue; const w = vKey(v.w); if (w.length < 2) continue;
+    if (!exact.has(w)) exact.set(w, v);
+    const w2 = w.replace(/(な|する)$/, ''); if (w2.length >= 2 && !exact.has(w2)) exact.set(w2, v);
+    if ((/[一-龥々]/.test(w.slice(0, -1)) || w.length >= 4) && /[うくぐすつぬぶむるい]$/.test(w) && !stem.has(w.slice(0, -1))) stem.set(w.slice(0, -1), v);
+    if (v.r) { const r = v.r.replace(/[\s　]/g, ''); if (!byR.has(r)) byR.set(r, []); byR.get(r).push(v); }
+  }
+  const GSKIP = new Set(['という', 'だろう', 'でしょう', 'ところ', 'ながら', 'から', 'まで', 'だけ', 'まま', 'ものだ', 'はずだ', 'として', 'とは', 'もの', 'なり', 'ては', 'いただく', 'くれる', 'もらう', 'にして', 'ている', 'ことに', 'てください']);
+  const gl = G.map(g => [gramCore(g.title), g]).filter(([c]) => (c.length >= 3 || /[一-龥]/.test(c) && c.length >= 2) && !GSKIP.has(c)).sort((a, b) => b[0].length - a[0].length);
+  return (MIX = { exact, stem, byR, gl });
+}
+function findWord(ix, s) {
+  s = String(s || '').replace(/[⟦⟧\s　「」。、]/g, ''); if (s.length < 2) return null;
+  if (ix.exact.has(s)) return ix.exact.get(s);
+  for (let L = s.length - 1; L >= 2; L--) { const p = s.slice(0, L); if (ix.exact.has(p) && /^[ぁ-んっ]*$/.test(s.slice(L))) return ix.exact.get(p); if (ix.stem.has(p)) return ix.stem.get(p); }
+  return null;
+}
+async function cardsForMistake(b, sec) {
+  if (sec > 7 || !b.o?.length) return [];
+  const ix = await mistakeIndex(); const right = b.o[b.a - 1] || ''; const und = (b.q || '').match(/⟦(.+?)⟧/g)?.map(x => x.slice(1, -1)) || [];
+  const out = new Set();
+  if (sec <= 4) {
+    const cands = sec === 1 ? und : sec === 2 ? [right] : sec === 3 ? [...und, right] : [und[0] || (b.q.length <= 10 ? b.q : '')];
+    for (const c of cands) { const v = findWord(ix, c); if (v) out.add('v:' + v.id); }
+    if (sec === 1 && !out.size && right) { // đề scan mất dấu gạch chân: tìm từ có cách đọc = đáp án và xuất hiện trong câu
+      const rr = right.replace(/[\s　]/g, ''), qq = (b.q || '').replace(/[\s　⟦⟧]/g, '');
+      for (let L = rr.length; L >= 2 && !out.size; L--) for (const [r, vs] of ix.byR) { if (!r.startsWith(rr.slice(0, L)) || r.length - L > 2) continue; const v = vs.find(x => { const w = vKey(x.w).replace(/[ぁ-ん]+$/, ''); return w.length >= 1 && /[一-龥]/.test(w) && qq.includes(w); }); if (v) { out.add('v:' + v.id); break; } }
+    }
+  } else {
+    const txt = right.replace(/[\s　]/g, '');
+    for (const [c, g] of ix.gl) { if (txt.includes(c) && (c.length >= 3 || txt === c)) { out.add('g:' + g.id); if (out.size >= 2) break; } }
+  }
+  return [...out];
+}
+function pushMistakeCards(keys) {
+  const now = Date.now(); let n = 0;
+  for (const k of keys) {
+    const c = S.srs[k];
+    if (!c) { S.srs[k] = { ivl: 0, ease: 2.5, reps: 0, lapses: 0, due: now, last: now, mis: 1 }; n++; }
+    else if (c.due > now) { c.due = now; c.last = now; c.mis = (c.mis || 0) + 1; n++; }
+    else { c.mis = (c.mis || 0) + 1; c.last = now; }
+  }
+  return n;
+}
+// chấm & ghi một câu đề thật; trả về số thẻ vừa thêm
+async function recordQ(meta, b, ok) {
+  let cards = [];
+  if (!ok) { try { cards = await cardsForMistake(b, b.sec); } catch { } }
+  logQ(meta, b, ok, cards);
+  return ok ? 0 : pushMistakeCards(cards);
+}
+on(/^\/mistakes$/, async (q) => {
+  const I = await load('exams/index'); const M = Object.fromEntries(I.map(x => [x.id, x]));
+  const wrong = Object.entries(S.tq).filter(([, v]) => !v.ok).sort((a, b) => b[1].t - a[1].t);
+  const misCards = Object.entries(S.srs).filter(([, c]) => c.mis);
+  const dueMis = misCards.filter(([, c]) => c.due <= Date.now()).length;
+  if (q.redo) return redoMistakes(wrong, M, q.s);
+  const kinds = {}; for (const [, v] of wrong) kinds[v.s] = (kinds[v.s] || 0) + 1;
+  const order = Object.keys(KIND_W).filter(k => kinds[k]);
+  const textKinds = order.filter(k => k[0] === 'r' && +k.slice(1) <= 7);
+  const items = [];
+  for (const [k, c] of misCards.sort((a, b) => b[1].last - a[1].last).slice(0, 60)) { const it = await buildItem(k); if (it) items.push([it, c]); }
+  main.innerHTML = `<a class="crumb" href="#/exam">‹ Thi thử</a><h1>Sổ lỗi sai</h1>
+  <p class="lead">Mỗi câu làm sai trong đề thật / đề thi thử được ghi lại ở đây. Với câu từ vựng, kanji, ngữ pháp (問題1–7), ứng dụng tự tìm từ hoặc mẫu ngữ pháp liên quan và đưa vào lịch ôn ngay hôm nay.</p>
+  <div class="stat-grid" style="margin-bottom:16px"><div class="stat"><b>${wrong.length}</b><span>câu sai chưa làm lại đúng</span></div><div class="stat"><b>${misCards.length}</b><span>thẻ thêm từ câu sai</span></div><div class="stat"><b>${dueMis}</b><span>thẻ cần ôn ngay</span></div></div>
+  <div class="row" style="margin-bottom:8px">${dueMis ? `<a class="btn primary" href="#/review?mis=1">Ôn ${dueMis} thẻ từ câu sai</a>` : ''}${textKinds.length ? `<a class="btn" href="#/mistakes?redo=1">Làm lại câu sai (問題1–7)</a>` : ''}</div>
+  ${wrong.length ? `<h2>Câu sai theo dạng</h2><div class="list">${order.map(k => { const ex = wrong.filter(([, v]) => v.s === k); const canRedo = k[0] === 'r' && +k.slice(1) <= 7;
+    return `<details class="item mis-k"><summary class="row"><div class="glyph" style="font-size:.85rem;font-family:var(--ui)">${k[0] === 'l' ? '聴' : '問'}${k.slice(1)}</div><div class="body"><b class="jp">${esc(KIND_NAME(k))}</b><div class="sub">${kinds[k]} câu sai</div></div>${canRedo ? `<a class="btn sm" href="#/mistakes?redo=1&s=${k}">Làm lại</a>` : `<a class="btn sm" href="${kindPractice(k)}">Luyện dạng này</a>`}</summary>
+      <div class="mis-list">${ex.slice(0, 40).map(([key, v]) => { const [tid, n] = key.split(':'); const m = M[tid];
+        return `<div class="small"><a href="#/test/${tid}?mode=practice&sec=${k.slice(1)}">${esc(m ? m.title.replace(/\s*\(.*?\)\s*/g, ' ').trim() : tid)} · câu ${n}</a> <span class="muted">· ${new Date(v.t).toLocaleDateString('vi-VN')}</span>${v.c?.length ? ` <span class="tag">+${v.c.length} thẻ</span>` : ''}</div>`; }).join('')}</div></details>`; }).join('')}</div>` : `<div class="status info">Chưa có câu sai nào được ghi lại. Làm một đề ở mục <a href="#/exam">Thi thử</a> hoặc luyện dạng đề trong mục Học — câu sai sẽ tự vào đây.</div>`}
+  ${items.length ? `<h2>Thẻ được thêm từ câu sai</h2><div class="list">${items.map(([x, c]) => `<div class="item"><div class="glyph">${x.type === 'v' ? '語' : x.type === 'g' ? '文' : '漢'}</div><div class="body"><b class="jp">${esc(x.it.w || x.it.title || x.it.k)}</b>${x.it.r ? ` <span class="muted small">${esc(x.it.r)}</span>` : ''}<div class="sub">${esc((x.it.m || x.it.mean || '').split(' • ')[0])}</div></div><span class="tag ${c.due <= Date.now() ? 'warn' : ''}">${c.due <= Date.now() ? 'cần ôn' : 'ôn sau ' + Math.max(1, Math.round((c.due - Date.now()) / DAY)) + ' ngày'}</span></div>`).join('')}</div>` : ''}`;
+});
+async function redoMistakes(wrong, M, only) {
+  const pick0 = wrong.filter(([, v]) => v.s[0] === 'r' && +v.s.slice(1) <= 7 && (!only || v.s === only)).slice(0, 15);
+  const items = [];
+  for (const [key, v] of pick0) {
+    const [tid, n] = key.split(':'); let E; try { E = await load('exams/' + tid); } catch { continue; }
+    for (const s of E.sections) for (const b of s.blocks) if (b.t === 'q' && String(b.n) === n && !b.pq) items.push({ ...b, sec: s.no, on: b.n, tid, n: items.length + 1, src: E.title });
+  }
+  main.innerHTML = `<a class="crumb" href="#/mistakes">‹ Sổ lỗi sai</a><h1>Làm lại câu sai</h1><p class="lead">${items.length} câu${only ? ' dạng ' + esc(KIND_NAME(only)) : ''}. Làm đúng thì câu đó được gạch khỏi sổ lỗi sai.</p>
+  ${items.map(b => testBlocks({ blocks: [b] }, 'm') + `<div class="muted small" style="margin-top:2px">${esc(b.src)} · ${esc(KIND_NAME('r' + b.sec))}</div>`).join('') || '<p class="muted">Không có câu nào có thể làm lại trực tiếp (câu đề gốc dạng ảnh hãy mở lại đề).</p>'}
+  <div class="row" style="margin-top:20px"><span id="res"></span><span class="spacer"></span><a class="btn" href="#/mistakes">Về sổ lỗi sai</a></div>`;
+  let right = 0, done = 0;
+  $$('.opt', main).forEach(bt => bt.onclick = async () => {
+    const qe = bt.closest('.q'); if (qe.classList.contains('graded')) return;
+    bt.classList.add('sel'); const it = items.find(x => 'm' + x.n === qe.dataset.n);
+    const ok = gradeQs(main, [{ el: qe, answer: it.a, explain: it.note && esc(it.note) }]); right += ok; done++;
+    await recordQ(M[it.tid], it, ok); save();
+    $('#res').innerHTML = `<b>Đúng ${right}/${done}</b>`;
+  });
+}
+
+// ---- (2) Bảng điểm yếu theo dạng đề + ước lượng điểm từng phần
+function weakData() {
+  const acc = {};
+  const add = (k, ok, n) => { const a = acc[k] ||= [0, 0]; a[0] += ok; a[1] += n; };
+  for (const v of Object.values(S.tq)) add(v.s, v.ok, 1);
+  for (const e of S.exams) { if (e.tq) continue; if (e.drill) add('r' + e.drill, e.score, e.total); else if (e.ldrill) add('l' + e.ldrill, e.score, e.total); }
+  const parts = PARTS.map(([jp, vi, ks]) => {
+    let w = 0, s = 0, wAll = 0; for (const k of ks) { wAll += KIND_W[k]; const a = acc[k]; if (a && a[1] >= 3) { w += KIND_W[k]; s += KIND_W[k] * a[0] / a[1]; } }
+    return { jp, vi, ks, est: w ? Math.round(60 * s / w) : null, cover: w / wAll };
+  });
+  return { acc, parts };
+}
+function weakHTML(compact) {
+  const { acc, parts } = weakData();
+  const known = Object.keys(KIND_W).filter(k => acc[k]?.[1] >= 3);
+  if (!known.length) return compact ? '' : `<div class="status info">Chưa đủ dữ liệu. Mỗi dạng cần ít nhất 3 câu đã làm (từ đề thật, đề thi thử hoặc mục “Luyện dạng đề”).</div>`;
+  const pct = k => Math.round(100 * acc[k][0] / acc[k][1]);
+  const weakest = known.sort((a, b) => pct(a) - pct(b)).slice(0, 3);
+  if (compact) {
+    const k = weakest[0];
+    return `<a class="panel weak-mini" href="#/stats?weak=1"><span class="glyph">弱</span><div><b>Dạng yếu nhất: <span class="jp">${esc(KIND_NAME(k))}</span> — đúng ${pct(k)}%</b><div class="small muted">Bấm để xem bảng điểm yếu đầy đủ</div></div><span class="btn sm" onclick="event.preventDefault();location.hash='${kindPractice(k)}'">Luyện ngay</span></a>`;
+  }
+  const est = parts.map(p => { const lv = p.est == null ? '' : p.est < 19 ? 'fail' : p.est < 30 ? 'warn' : 'pass';
+    return `<div class="est ${lv}"><span class="jp">${p.jp}</span><b>${p.est ?? '–'}<small>/60</small></b><span class="small">${p.vi}${p.est != null && p.cover < .5 ? ' · ít dữ liệu' : ''}</span>${p.est != null && p.est < 19 ? '<span class="tag warn">Nguy cơ điểm liệt</span>' : ''}</div>`; }).join('');
+  const tot = parts.every(p => p.est != null) ? parts.reduce((a, p) => a + p.est, 0) : null;
+  const rows = PARTS.map(([jp, vi, ks]) => `<div class="weak-part"><span class="jp">${jp}</span> <span class="muted small">${vi}</span></div>` + ks.map(k => { const a = acc[k]; const p = a && a[1] ? Math.round(100 * a[0] / a[1]) : null;
+    return `<a class="weak-row ${weakest.includes(k) ? 'worst' : ''}" href="${kindPractice(k)}"><span class="jp">${esc(KIND_NAME(k))}</span><span class="wbar"><i class="${p == null ? '' : p < 50 ? 'bad' : p < 65 ? 'mid' : 'good'}" style="width:${p ?? 0}%"></i></span><b>${p == null ? '–' : p + '%'}</b><span class="small muted">${a ? a[1] + ' câu' : 'chưa làm'}</span></a>`; }).join('')).join('');
+  return `<div class="est-grid">${est}<div class="est total ${tot == null ? '' : tot >= 100 && parts.every(p => p.est >= 19) ? 'pass' : 'fail'}"><span>Tổng ước lượng</span><b>${tot ?? '–'}<small>/180</small></b><span class="small">${tot == null ? 'cần dữ liệu cả 3 phần' : tot >= 100 && parts.every(p => p.est >= 19) ? 'Đạt mức đậu (≥100, mỗi phần ≥19)' : 'Chưa đạt mức đậu'}</span></div></div>
+  <p class="small muted">Ước lượng = tỉ lệ đúng từng dạng × số câu của dạng đó trong đề thật, quy về thang 60. JLPT chấm theo IRT nên điểm thật có thể lệch vài điểm.</p>
+  <div class="panel weak-table">${rows}</div>
+  <p class="small muted">Dạng yếu nhất được tô nổi. Bấm vào một dạng để luyện ngay.</p>`;
+}
+
+// ---- (3) Thi thật mô phỏng: Phần 1 (110′) → Phần 2 nghe (55′) → quy đổi điểm, đậu / trượt
+function jlptScore(ym) {
+  const r = S.exams.filter(e => e.real === ym && e.part === 'r').pop(), l = S.exams.filter(e => e.real === ym && e.part === 'l').pop();
+  const sum = (e, f) => { let ok = 0, n = 0; for (const [k, v] of Object.entries(e?.qs || {})) { if (f(+k.replace(/\D/g, ''))) { ok += v[0]; n += v[1]; } } return n ? Math.round(60 * ok / n) : null; };
+  const p = { gen: r ? sum(r, n => n <= 7) : null, read: r ? sum(r, n => n >= 8) : null, lis: l ? Math.round(60 * l.score / l.total) : null };
+  const done = p.gen != null && p.read != null && p.lis != null;
+  const total = done ? p.gen + p.read + p.lis : null;
+  return { r, l, p, done, total, pass: done && total >= 100 && p.gen >= 19 && p.read >= 19 && p.lis >= 19 };
+}
+on(/^\/jlpt$/, async () => {
+  const P = realExamPairs(await load('exams/index')).filter(p => p.read && p.listen);
+  const hist = [...new Set(S.exams.filter(e => e.real).map(e => e.real))].map(ym => ({ ym, ...jlptScore(ym) })).filter(x => x.r || x.l);
+  main.innerHTML = `<a class="crumb" href="#/exam">‹ Thi thử</a><h1>Thi thật mô phỏng</h1>
+  <p class="lead">Làm trọn một kỳ thi như ngày thi thật: <b>Phần 1</b> Kiến thức ngôn ngữ + Đọc hiểu 110 phút, nghỉ, rồi <b>Phần 2</b> Nghe hiểu ~55 phút. Xong cả hai phần, ứng dụng quy đổi ra điểm từng phần (thang 60) và báo <b>đậu / trượt</b> theo luật JLPT: tổng ≥ 100/180 và không phần nào dưới 19.</p>
+  ${hist.length ? `<h2>Kết quả các lần thi</h2><div class="list">${hist.map(h => `<a class="item" href="#/jlpt/${h.ym}"><div class="glyph" style="font-size:.9rem;font-family:var(--ui)">${h.done ? h.total : '…'}</div><div class="body"><b>Kỳ ${+h.ym.slice(5)}/${h.ym.slice(0, 4)}</b><div class="sub">${h.done ? `言語知識 ${h.p.gen} · 読解 ${h.p.read} · 聴解 ${h.p.lis}` : h.r ? 'Đã xong phần 1 — còn phần nghe' : 'Đã xong phần nghe — còn phần 1'}</div></div>${h.done ? `<span class="tag ${h.pass ? 'on' : 'warn'}">${h.pass ? 'ĐẬU' : 'TRƯỢT'}</span>` : '<span class="tag">Đang làm</span>'}</a>`).join('')}</div>` : ''}
+  <h2>Chọn kỳ thi</h2><p class="small muted">Nên chọn kỳ chưa làm để kết quả khách quan. Kỳ đã làm ở chế độ luyện có dấu ✓.</p>
+  <div class="list">${P.map(p => { const did = S.exams.some(e => e.test === p.read.id || e.test === p.listen.id);
+    return `<a class="item" href="#/jlpt/${p.ym}"><div class="glyph" style="font-size:.85rem;font-family:var(--ui)">${+p.ym.slice(5)}/${p.ym.slice(2, 4)}</div><div class="body"><b>Tháng ${+p.ym.slice(5)}/${p.ym.slice(0, 4)}${did ? ' <span class="muted">✓</span>' : ''}</b><div class="sub">${p.read.paper ? 'đề gốc + phiếu trả lời' : 'đề có chữ'} · ${p.read.nq + p.listen.nq} câu</div></div><span class="chev">›</span></a>`; }).join('')}</div>`;
+});
+on(/^\/jlpt\/(\d{4}-\d{2})$/, async (ym) => {
+  const p = realExamPairs(await load('exams/index')).find(x => x.ym === ym && x.read && x.listen); if (!p) throw new Error('Không có kỳ thi này');
+  const sc = jlptScore(ym);
+  const bar = (lab, v) => `<div class="est ${v == null ? '' : v < 19 ? 'fail' : v < 30 ? 'warn' : 'pass'}"><span class="jp">${lab[0]}</span><b>${v ?? '–'}<small>/60</small></b><span class="small">${lab[1]}${v != null && v < 19 ? ' · dưới điểm liệt' : ''}</span></div>`;
+  main.innerHTML = `<a class="crumb" href="#/jlpt">‹ Thi thật mô phỏng</a><h1>Kỳ thi tháng ${+ym.slice(5)}/${ym.slice(0, 4)}</h1>
+  ${sc.done ? `<div class="verdict ${sc.pass ? 'pass' : 'fail'}"><div class="hanko"><div><b>${sc.pass ? '合格' : '不合格'}</b><span>${sc.pass ? 'đậu' : 'trượt'}</span></div></div><div><div class="big">${sc.total}<small>/180</small></div><div>${sc.pass ? 'Đạt yêu cầu: tổng ≥ 100 và không phần nào dưới 19.' : sc.total < 100 ? `Còn thiếu ${100 - sc.total} điểm để đạt mức 100.` : 'Đủ tổng điểm nhưng có phần dưới 19 (điểm liệt).'}</div></div></div>` : ''}
+  <div class="est-grid">${bar(['言語知識', 'Từ vựng · Ngữ pháp'], sc.p.gen)}${bar(['読解', 'Đọc hiểu'], sc.p.read)}${bar(['聴解', 'Nghe hiểu'], sc.p.lis)}</div>
+  <p class="small muted">Điểm quy đổi gần đúng = tỉ lệ câu đúng × 60 cho từng phần (JLPT thật chấm theo IRT, điểm có thể lệch vài điểm).</p>
+  <div class="steps-run">
+   <div class="run ${sc.r ? 'done' : ''}"><span class="step-n">1</span><div><b>Phần 1 · 言語知識（文字・語彙・文法）・読解</b><div class="small muted">110 phút · ${p.read.nq} câu${sc.r ? ` · đã làm ${new Date(sc.r.at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}: ${sc.r.score}/${sc.r.total}` : ''}</div></div><a class="btn ${sc.r ? '' : 'primary'}" href="#/test/${p.read.id}?mode=timed&real=${ym}">${sc.r ? 'Làm lại' : 'Bắt đầu'}</a></div>
+   <div class="run ${sc.l ? 'done' : ''}"><span class="step-n">2</span><div><b>Phần 2 · 聴解</b><div class="small muted">~55 phút · ${p.listen.nq} câu · nghe một lần, không tua${sc.l ? ` · đã làm: ${sc.l.score}/${sc.l.total}` : ''}</div></div><a class="btn ${sc.r && !sc.l ? 'primary' : ''}" href="#/test/${p.listen.id}?mode=timed&real=${ym}">${sc.l ? 'Làm lại' : 'Bắt đầu'}</a></div>
+  </div>
+  <div class="status info" style="margin-top:14px">Mẹo phòng thi: Phần 1 làm 問題1–7 trong 25–30 phút, làm 問題13 (tìm thông tin) sớm, dành phần còn lại cho đọc. Phần nghe: tranh thủ đọc trước lựa chọn của 問題2 trong lúc đề đọc hướng dẫn.</div>
+  ${sc.done ? `<div class="row" style="margin-top:14px"><a class="btn" href="#/mistakes">Xem sổ lỗi sai</a><a class="btn" href="#/stats?weak=1">Bảng điểm yếu</a></div>` : ''}`;
+});
+
+// ---- (4) Hay ra thi
+let FREQ = null;
+async function loadFreq() { if (!FREQ) { try { FREQ = await load('freq'); } catch { FREQ = { n: 0, v: {}, g: {} }; } } return FREQ; }
+const hotOf = key => { if (!FREQ) return 0; const [t, id] = [key[0], key.slice(2)]; return (t === 'v' ? FREQ.v[id] : t === 'g' ? FREQ.g[id] : null)?.[0] || 0; };
+const ymLabel = id => id === 'de12210' ? '12/2021' : `${+id.slice(6, 8)}/${id.slice(2, 6)}`;
+const ymSort = a => [...a].sort((x, y) => (x === 'de12210' ? '202112' : x.slice(2)).localeCompare(y === 'de12210' ? '202112' : y.slice(2)));
+const hotTag = key => { const n = hotOf(key); if (!n) return ''; const src = (key[0] === 'v' ? FREQ.v : FREQ.g)[key.slice(2)][1]; return `<span class="tag hot" title="Đã được hỏi trực tiếp trong đề thật: ${ymSort(src).map(ymLabel).join(', ')}">🔥 ra thi ${n} lần</span>`; };
+async function hotKeys(t) {
+  const F = await loadFreq(); const seen = new Set(), out = [];
+  if (t === 'v') { const V = await allVocab(); const by = new Map(V.map(v => [v.id, v]));
+    for (const [id, [n]] of Object.entries(F.v).sort((a, b) => b[1][0] - a[1][0])) { const v = by.get(id); if (!v || !v.m) continue; const w = vKey(v.w); if (seen.has(w)) continue; seen.add(w); out.push('v:' + id); } }
+  else { const G = await load('grammar'); const by = new Map(G.map(g => [g.id, g]));
+    for (const [id] of Object.entries(F.g).sort((a, b) => b[1][0] - a[1][0])) { const g = by.get(id); if (!g) continue; const c = gramCore(g.title); if (seen.has(c)) continue; seen.add(c); out.push('g:' + id); } }
+  return out;
+}
+on(/^\/hot$/, async (q) => {
+  const t = q.t === 'g' ? 'g' : 'v'; const F = await loadFreq(); const keys = await hotKeys(t);
+  const items = []; for (const k of keys) { const b = await buildItem(k); if (b) items.push(b); }
+  const act = !!S.active['hot:' + t]; const learned = keys.filter(k => S.srs[k]).length;
+  main.innerHTML = `<a class="crumb" href="#/learn">‹ Học</a><h1>🔥 Hay ra thi</h1>
+  <p class="lead">${t === 'v' ? 'Từ vựng' : 'Mẫu ngữ pháp'} <b>đã được hỏi trực tiếp</b> trong ${F.n} đề thật JLPT N1 (2010–2018, 12/2021)${t === 'v' ? ' — từ gạch chân và lựa chọn của 問題1–4' : ' — lựa chọn của 問題5–7'}. Đề hay lặp lại từ và mẫu cũ, nên đây là nhóm nên thuộc trước.</p>
+  <div class="seg" style="margin-bottom:12px"><a class="${t === 'v' ? 'on' : ''}" href="#/hot?t=v">Từ vựng (${(await hotKeys('v')).length})</a><a class="${t === 'g' ? 'on' : ''}" href="#/hot?t=g">Ngữ pháp (${(await hotKeys('g')).length})</a></div>
+  <div class="panel row" style="margin-bottom:14px"><div><b>${learned}/${keys.length}</b> đã học</div><span class="spacer"></span><button class="btn ${act ? '' : 'primary'}" id="tog">${act ? 'Ngừng học nhóm này' : 'Học nhóm này (ưu tiên trước)'}</button><a class="btn" href="#/review?hot=${t}&mode=browse">Lật thẻ</a></div>
+  <div class="list">${items.map(x => { const n = hotOf(x.key), src = (t === 'v' ? F.v : F.g)[x.key.slice(2)][1];
+    return `<${t === 'g' ? `a href="#/grammar/${x.it.id}"` : 'div'} class="item"><div class="glyph" style="font-size:.95rem;font-family:var(--ui)">${n}×</div><div class="body"><b class="jp">${t === 'v' ? sayT(x.it.w, x.it.r || x.it.w) : esc(x.it.title)}</b>${x.it.r ? ` <span class="muted small">${esc(x.it.r)}</span>` : ''}${S.srs[x.key] ? ` <span class="tag ${isMastered(S.srs[x.key]) ? 'on' : ''}">${isMastered(S.srs[x.key]) ? 'Đã thuộc' : 'Đang học'}</span>` : ''}<div class="sub">${esc((x.it.m || x.it.mean || '').split(' • ')[0])}</div><div class="small muted">Đề: ${ymSort(src).map(ymLabel).join(', ')}</div></div></${t === 'g' ? 'a' : 'div'}>`; }).join('')}</div>`;
+  $('#tog').onclick = () => { if (act) delete S.active['hot:' + t]; else S.active['hot:' + t] = true; save(); toast(act ? 'Đã bỏ khỏi lịch học' : 'Đã thêm — thẻ mới sẽ lấy từ nhóm này trước'); route(); };
+});
+
+// ---- (5) Công cụ nghe cho đề: tốc độ, tua 5 giây, lặp đoạn A–B (áp dụng cho audio đang phát)
+let AUX = { el: null, a: null, b: null, loop: false };
+const getRate = () => { try { return +localStorage.getItem('n1.exrate') || 1; } catch { return 1; } };
+document.addEventListener('play', e => { if (e.target.tagName !== 'AUDIO' || !e.target.closest('#main')) return; if (AUX.el !== e.target) { AUX.el = e.target; AUX.a = AUX.b = null; AUX.loop = false; auxShow(); } if (e.target.dataset.free !== '0') e.target.playbackRate = $('#auxbar') ? getRate() : 1; }, true);
+document.addEventListener('timeupdate', e => { const el = e.target; if (el !== AUX.el || !AUX.loop || AUX.a == null || AUX.b == null) return; if (el.currentTime >= AUX.b) el.currentTime = AUX.a; }, true);
+function auxBarHTML() { return `<div class="auxbar panel" id="auxbar"><b class="small">Công cụ nghe</b><button class="btn sm" data-x="-5">−5s</button><button class="btn sm" data-x="5">+5s</button>
+  <div class="seg sm" id="auxspd">${[0.8, 0.9, 1, 1.1, 1.2].map(v => `<button data-v="${v}">${v}×</button>`).join('')}</div>
+  <button class="btn sm" data-ab="a">A</button><button class="btn sm" data-ab="b">B</button><button class="btn sm" data-ab="loop" id="auxloop">🔁 Lặp A–B</button><span class="small muted" id="auxinfo">Bấm ▶ một file nghe để dùng</span></div>`; }
+function auxShow() {
+  const bar = $('#auxbar'); if (!bar) return; const f = s => s == null ? '–' : `${s / 60 | 0}:${String(s % 60 | 0).padStart(2, '0')}`;
+  $$('#auxspd button').forEach(b => b.classList.toggle('on', +b.dataset.v === getRate()));
+  $('#auxloop').classList.toggle('primary', AUX.loop);
+  $('#auxinfo').textContent = AUX.el ? `A ${f(AUX.a)} · B ${f(AUX.b)}${AUX.loop ? ' · đang lặp' : ''}` : 'Bấm ▶ một file nghe để dùng';
+}
+function bindAux() {
+  if (!$('#auxbar')) return; AUX = { el: null, a: null, b: null, loop: false };
+  $$('#auxbar [data-x]').forEach(b => b.onclick = () => { if (AUX.el) AUX.el.currentTime = Math.max(0, AUX.el.currentTime + +b.dataset.x); });
+  $$('#auxspd button').forEach(b => b.onclick = () => { try { localStorage.setItem('n1.exrate', b.dataset.v); } catch { } $$('#main audio').forEach(a => a.playbackRate = +b.dataset.v); auxShow(); });
+  $$('#auxbar [data-ab]').forEach(b => b.onclick = () => { if (!AUX.el) return toast('Hãy bấm ▶ một file nghe trước');
+    const k = b.dataset.ab, t = AUX.el.currentTime;
+    if (k === 'a') { AUX.a = t; if (AUX.b != null && AUX.b <= t) AUX.b = null; }
+    else if (k === 'b') { AUX.b = t; if (AUX.a == null || AUX.a >= t) AUX.a = Math.max(0, t - 5); AUX.loop = true; AUX.el.currentTime = AUX.a; AUX.el.play().catch(() => { }); }
+    else { if (AUX.a == null || AUX.b == null) return toast('Đặt điểm A và B trước (A = đầu đoạn, B = cuối đoạn)'); AUX.loop = !AUX.loop; }
+    auxShow(); });
+  auxShow();
+}
+
+// ---- (6) Đếm ngược đến ngày thi
+function nextJLPT(from = new Date()) {
+  const res = []; for (let y = from.getFullYear(); y <= from.getFullYear() + 1; y++) for (const m of [6, 11]) { const d = new Date(y, m, 1); d.setDate(1 + (7 - d.getDay()) % 7); if (d >= startOfDay(from.getTime())) res.push(d); }
+  return res.slice(0, 2);
+}
+async function countdownData() {
+  const ed = S.settings.examDate; if (!ed) return null;
+  const exam = new Date(ed + 'T00:00:00'); const days = Math.round((exam - startOfDay()) / DAY);
+  const left = (await activeNewKeys()).length;
+  const phase = days < 0 ? 'done' : days <= 28 ? 'sprint' : days <= 84 ? 'practice' : 'build';
+  const learnDays = Math.max(1, days - 28);
+  const rec = phase === 'sprint' || !left ? 0 : Math.max(5, Math.min(80, Math.ceil(left / learnDays)));
+  const perWeek = phase === 'sprint' ? 2 : phase === 'practice' ? 1 : 0.5;
+  const mon = mondayOf().getTime();
+  const weekExams = S.exams.filter(e => e.at >= mon && (e.real || (e.test && /^(jr|jl|jn|de|t3|ls)/.test(e.test) && !e.ldrill))).length;
+  return { exam, days, left, phase, rec, perWeek, weekExams };
+}
+const PHASE = { build: ['Giai đoạn 1 · Xây nền', 'Học thẻ mới đều mỗi ngày, luyện từng dạng đề, 2 tuần làm 1 đề thật.'], practice: ['Giai đoạn 2 · Luyện đề', 'Vẫn học thẻ mới, mỗi tuần 1 đề thật đủ giờ + chữa kỹ trong sổ lỗi sai.'], sprint: ['Giai đoạn 3 · Nước rút', 'Ngừng thẻ mới, chỉ ôn thẻ cũ + sổ lỗi sai, mỗi tuần 2 đề thật mô phỏng, giữ nhịp ngủ nghỉ.'], done: ['Đã qua ngày thi', 'Đặt ngày thi mới để tiếp tục lộ trình.'] };
+async function countdownHTML() {
+  const c = await countdownData();
+  if (!c) { const [a, b] = nextJLPT();
+    return `<div class="panel cd-set"><b>Bạn thi kỳ nào?</b><span class="small muted">Đặt ngày thi để có lộ trình đếm ngược.</span><div class="row" style="margin-top:8px">${[a, b].map(d => `<button class="btn sm" data-ed="${todayKey(d)}">${d.toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric' })}</button>`).join('')}<a class="btn sm ghost" href="#/countdown">Ngày khác…</a></div></div>`; }
+  const wk = c.perWeek >= 1 ? `${c.weekExams}/${c.perWeek} đề tuần này` : `1 đề / 2 tuần · tuần này ${c.weekExams}`;
+  return `<a class="panel countdown ${c.phase}" href="#/countdown"><div class="cd-days"><b>${Math.max(0, c.days)}</b><span>ngày</span></div><div><b>${c.days >= 0 ? `Đến kỳ thi ${c.exam.toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric' })}` : 'Đã qua ngày thi'}</b><div class="small">${PHASE[c.phase][0]}</div>
+    <div class="small muted">${c.phase === 'sprint' ? 'Không học thẻ mới' : c.left ? `Nên học ${c.rec} thẻ mới/ngày` : 'Chưa chọn bài để học'} · ${wk}</div></div><span class="chev">›</span></a>`;
+}
+function bindCountdownSet() { $$('[data-ed]').forEach(b => b.onclick = () => { S.settings.examDate = b.dataset.ed; save(); toast('Đã đặt ngày thi'); route(); }); }
+on(/^\/countdown$/, async () => {
+  const c = await countdownData(); const [a, b] = nextJLPT();
+  main.innerHTML = `<a class="crumb" href="#/today">‹ Hôm nay</a><h1>Đếm ngược đến ngày thi</h1>
+  <div class="panel"><div class="row"><label for="ed"><b>Ngày thi</b></label><input id="ed" type="date" class="date-in" value="${S.settings.examDate || ''}">${[a, b].map(d => `<button class="btn sm" data-ed="${todayKey(d)}">JLPT ${d.toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric' })}</button>`).join('')}</div>
+  <p class="small muted" style="margin:8px 0 0">JLPT tổ chức vào Chủ nhật đầu tiên của tháng 7 và tháng 12 (kiểm tra lại lịch chính thức ở nơi bạn đăng ký thi).</p></div>
+  ${c ? `<div class="cd-hero ${c.phase}"><div class="cd-days big"><b>${Math.max(0, c.days)}</b><span>ngày · ${Math.max(0, Math.ceil(c.days / 7))} tuần</span></div><div><h2 style="margin:0">${PHASE[c.phase][0]}</h2><p>${PHASE[c.phase][1]}</p></div></div>
+  <h2>Mục tiêu tính theo ngày thi</h2>
+  ${!c.left && c.phase !== 'sprint' && c.phase !== 'done' ? `<div class="status info">Bạn chưa chọn bài nào để học nên chưa tính được số thẻ mới mỗi ngày. Vào <a href="#/learn">Học</a> chọn bài, hoặc bật nhóm <a href="#/hot">🔥 Hay ra thi</a>.</div>` : ''}
+  <div class="stat-grid"><div class="stat"><b>${c.rec}</b><span>thẻ mới mỗi ngày (còn ${c.left.toLocaleString('vi')} thẻ chưa học trong các bài đang học${c.phase !== 'sprint' && c.left ? `, chia đều cho ${Math.max(1, c.days - 28)} ngày trước 4 tuần nước rút` : ''})</span></div>
+   <div class="stat"><b>${c.perWeek >= 1 ? c.perWeek : '½'}</b><span>đề thật đủ giờ mỗi tuần · tuần này đã làm ${c.weekExams}</span></div>
+   <div class="stat"><b>30′</b><span>nghe mỗi ngày (đề nghe thật + shadowing)</span></div></div>
+  <div class="row" style="margin-top:12px">${c.phase !== 'done' && (c.left || c.phase === 'sprint') ? `<button class="btn primary" id="apply">Đặt ${c.rec} thẻ mới/ngày</button>` : ''}<span class="small muted">Hiện tại: ${S.settings.newPerDay} thẻ mới/ngày</span></div>
+  <h2>Các mốc</h2><div class="list">${[['build', 'Xây nền', 'đến 12 tuần trước thi'], ['practice', 'Luyện đề', '12 → 4 tuần trước thi'], ['sprint', 'Nước rút', '4 tuần cuối']].map(([k, n, w]) => `<div class="item ${c.phase === k ? 'cd-now' : ''}"><div class="glyph">${{ build: '基', practice: '練', sprint: '走' }[k]}</div><div class="body"><b>${n}</b> <span class="small muted">· ${w}</span><div class="sub">${PHASE[k][1]}</div></div>${c.phase === k ? '<span class="tag on">Đang ở đây</span>' : ''}</div>`).join('')}</div>
+  <div class="row" style="margin-top:16px"><a class="btn" href="#/jlpt">Thi thật mô phỏng</a><a class="btn" href="#/hot">Từ hay ra thi</a><a class="btn" href="#/stats?weak=1">Bảng điểm yếu</a></div>` : ''}`;
+  $('#ed').onchange = e => { S.settings.examDate = e.target.value; save(); route(); };
+  bindCountdownSet();
+  $('#apply')?.addEventListener('click', () => { S.settings.newPerDay = c.rec; save(); toast('Đã cập nhật số thẻ mới mỗi ngày'); route(); });
 });
 
 /* ---------------- khởi động ---------------- */
