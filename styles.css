@@ -328,3 +328,12 @@ main:focus,#main:focus{outline:none}
 .kvi{font-size:.85rem;color:var(--accent,#2563eb);font-weight:600;margin-top:2px;max-width:9em;line-height:1.25}
 .back .kvi{max-width:none;font-size:1rem}
 .tipvi{font-size:.85em;color:var(--muted,#6b7280);margin-top:2px}
+
+.h1row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.h1row h1{margin-right:auto}
+.online-pill{display:inline-flex;align-items:center;gap:7px;font-size:.8rem;font-weight:500;color:var(--ink-2,var(--ink));background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap}
+.online-pill i{width:8px;height:8px;border-radius:50%;background:var(--moss);box-shadow:0 0 0 3px color-mix(in srgb,var(--moss) 22%,transparent);animation:onl 2.4s ease-in-out infinite}
+@keyframes onl{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--moss) 8%,transparent)}}
+.online-pill[hidden]{display:none!important}
+.nav .online-pill{display:none}
+@media (min-width:900px){.nav .online-pill{display:inline-flex;align-self:flex-start;margin:auto 0 0 12px}.nav .online-pill:not([hidden])+.sync-pill{margin-top:6px}}

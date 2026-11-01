@@ -198,7 +198,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 const routes = [];
 const on = (re, fn) => routes.push([re, fn]);
 let cleanup = null;
-async function route() {
+let route = async function () {
   if (cleanup) { cleanup(); cleanup = null; }
   const h = location.hash.slice(1) || '/today';
   const [path, qs] = h.split('?');
@@ -210,6 +210,93 @@ async function route() {
 }
 document.addEventListener('click', e => { const w = e.target.closest('.crop-wrap'); if (w) w.classList.toggle('zoom'); });
 window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
+
+
+/* ---------------- Số người đang truy cập ----------------
+   Không có máy chủ riêng: mỗi tab gửi "nhịp tim" qua một MQTT broker công cộng (WebSocket),
+   đếm số mã ngẫu nhiên đã gửi nhịp tim trong 75 giây gần nhất. Không gửi bất kỳ thông tin cá nhân nào. */
+const PRES = {
+  url: 'wss://broker.emqx.io:8084/mqtt', base: 'hungnxmt/hoc-tieng-nhat/online/v1',
+  id: Math.random().toString(36).slice(2, 10), seen: new Map(), n: 0, ws: null, retry: 2000, beat: null, ping: null,
+};
+const mqtt = {
+  str(s) { const b = new TextEncoder().encode(s); return [b.length >> 8, b.length & 255, ...b]; },
+  pkt(type, body) {
+    const len = []; let x = body.length;
+    do { let d = x % 128; x = Math.floor(x / 128); if (x > 0) d |= 128; len.push(d); } while (x > 0);
+    return new Uint8Array([type, ...len, ...body]);
+  },
+  connect(cid, willTopic, willMsg, keep) {
+    return this.pkt(0x10, [...this.str('MQTT'), 4, 0x02 | 0x04, keep >> 8, keep & 255, ...this.str(cid), ...this.str(willTopic), ...this.str(willMsg)]);
+  },
+  subscribe(topic) { return this.pkt(0x82, [0, 1, ...this.str(topic), 0]); },
+  publish(topic, msg) { return this.pkt(0x30, [...this.str(topic), ...new TextEncoder().encode(msg)]); },
+  // tách các gói tin trong buffer; trả về [{type, topic, msg}], phần dư giữ lại
+  parse(buf) {
+    const out = []; let i = 0;
+    while (i + 2 <= buf.length) {
+      let mul = 1, len = 0, j = i + 1, d;
+      do { if (j >= buf.length) return [out, buf.slice(i)]; d = buf[j++]; len += (d & 127) * mul; mul *= 128; } while (d & 128);
+      if (j + len > buf.length) break;
+      const type = buf[i] >> 4, body = buf.subarray(j, j + len);
+      if (type === 3) {
+        const tl = (body[0] << 8) | body[1], qos = (buf[i] >> 1) & 3, off = 2 + tl + (qos ? 2 : 0);
+        out.push({ type, topic: new TextDecoder().decode(body.subarray(2, 2 + tl)), msg: new TextDecoder().decode(body.subarray(off)) });
+      } else out.push({ type });
+      i = j + len;
+    }
+    return [out, buf.slice(i)];
+  },
+};
+function presCount() {
+  const now = Date.now();
+  for (const [k, t] of PRES.seen) if (now - t > 75000) PRES.seen.delete(k);
+  PRES.n = PRES.seen.size + (PRES.seen.has(PRES.id) ? 0 : 1);
+  presShow();
+}
+function presShow() {
+  const ok = PRES.ws && PRES.ws.readyState === 1;
+  $$('.online-pill').forEach(el => { el.hidden = !ok; el.innerHTML = `<i></i>${PRES.n} người đang học`; });
+}
+function presConnect() {
+  if (!('WebSocket' in window) || location.protocol === 'file:') return;
+  let ws, rest = new Uint8Array(0);
+  try { ws = new WebSocket(PRES.url, ['mqtt']); } catch { return; }
+  ws.binaryType = 'arraybuffer'; PRES.ws = ws;
+  const me = `${PRES.base}/u/${PRES.id}`, send = p => { if (ws.readyState === 1) ws.send(p); };
+  const beat = () => send(mqtt.publish(me, '1'));
+  ws.onopen = () => send(mqtt.connect('n1-' + PRES.id, me, '0', 60));
+  ws.onmessage = ev => {
+    const a = new Uint8Array(ev.data), b = new Uint8Array(rest.length + a.length); b.set(rest); b.set(a, rest.length);
+    const [pk, r] = mqtt.parse(b); rest = r;
+    for (const p of pk) {
+      if (p.type === 2) {                       // CONNACK
+        PRES.retry = 2000;
+        send(mqtt.subscribe(PRES.base + '/#'));
+        PRES.seen.set(PRES.id, Date.now()); beat(); send(mqtt.publish(PRES.base + '/hello', PRES.id));
+        clearInterval(PRES.beat); PRES.beat = setInterval(() => { beat(); presCount(); }, 25000);
+        clearInterval(PRES.ping); PRES.ping = setInterval(() => send(new Uint8Array([0xC0, 0])), 45000);
+        presCount();
+      } else if (p.type === 3) {
+        if (p.topic === PRES.base + '/hello') { if (p.msg !== PRES.id) setTimeout(beat, Math.random() * 1500); continue; }
+        const m = p.topic.match(/\/u\/([a-z0-9]{1,16})$/);
+        if (!m) continue;
+        if (p.msg === '1') PRES.seen.set(m[1], Date.now()); else PRES.seen.delete(m[1]);
+        presCount();
+      }
+    }
+  };
+  ws.onclose = () => {
+    clearInterval(PRES.beat); clearInterval(PRES.ping); PRES.seen.clear(); presShow();
+    if (PRES.ws === ws) { PRES.ws = null; setTimeout(presConnect, PRES.retry); PRES.retry = Math.min(PRES.retry * 2, 120000); }
+  };
+  ws.onerror = () => {};
+}
+window.addEventListener('pagehide', () => { const ws = PRES.ws; if (ws && ws.readyState === 1) { ws.send(mqtt.publish(`${PRES.base}/u/${PRES.id}`, '0')); ws.send(new Uint8Array([0xE0, 0])); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !PRES.ws) { PRES.retry = 2000; presConnect(); } });
+const _route = route;
+route = async (...a) => { await _route(...a); presShow(); };
+presConnect();
 
 /* ---------------- Hôm nay ---------------- */
 function streak() {
@@ -224,7 +311,7 @@ on(/^\/today$/, async () => {
   const st = streak(), activeCount = Object.keys(S.active).filter(k => S.active[k]).length;
   const total = due.length + fresh.length;
   main.innerHTML = `
-  <h1>Hôm nay</h1>
+  <div class="h1row"><h1>Hôm nay</h1><span class="online-pill" hidden title="Số người đang mở ứng dụng (cập nhật khoảng 30 giây)"></span></div>
   <p class="lead">${new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
   <div class="today">
     <section class="due-block">
