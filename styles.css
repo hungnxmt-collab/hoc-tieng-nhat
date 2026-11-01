@@ -225,3 +225,19 @@ details.box summary{cursor:pointer;font-weight:600}
 .lesson-note p{margin:6px 0}
 .lesson-note summary{cursor:pointer;color:var(--indigo-2);font-weight:500;margin:6px 0}
 .lesson-note .pages img{margin-top:8px}
+.exvi{font-family:var(--ui);font-size:.82rem;color:var(--ink-3);margin-top:1px}
+.card .exs .exvi{font-size:.85rem}
+.days{display:grid;gap:8px;margin-top:10px}
+.day{display:grid;grid-template-columns:120px 1fr;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--bg)}
+.day.today{border-color:var(--indigo-2);box-shadow:inset 3px 0 0 var(--indigo-2)}
+.day.done .plan-text{color:var(--ink-3)}
+.day.off{opacity:.6}
+.chk{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+.chk input{width:18px;height:18px;margin-top:3px;accent-color:var(--moss)}
+.plan-text{font-size:.92rem;line-height:1.5}
+.plan-text hr{border:0;border-top:1px dashed var(--line);margin:6px 0}
+.plan-text a{font-weight:600;text-decoration:none;border-bottom:1px solid currentColor}
+.plan-today.done .plan-text{color:var(--ink-3)}
+.week summary .tag{margin-left:6px}
+.date-in{padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--surface)}
+@media(max-width:520px){.day{grid-template-columns:1fr}}

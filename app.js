@@ -15,7 +15,7 @@ const ICON = {
 
 /* ---------------- state (lưu localStorage + GitHub) ---------------- */
 const LS_STATE = 'n1.state.v1', LS_CFG = 'n1.github.v1';
-const emptyState = () => ({ v: 1, updated: 0, srs: {}, active: {}, log: {}, exams: [], kana: {}, custom: [], settings: { newPerDay: 20, theme: 'auto' } });
+const emptyState = () => ({ v: 1, updated: 0, srs: {}, active: {}, log: {}, exams: [], kana: {}, custom: [], plan: {}, settings: { newPerDay: 20, theme: 'auto', planStart: '' } });
 let S = (() => { try { return Object.assign(emptyState(), JSON.parse(localStorage.getItem(LS_STATE)) || {}); } catch { return emptyState(); } })();
 let CFG = (() => { try { return JSON.parse(localStorage.getItem(LS_CFG)) || {}; } catch { return {}; } })();
 function save(dirty = true) {
@@ -151,6 +151,7 @@ function merge(a, b) { // gộp 2 trạng thái, giữ bản mới hơn cho từ
   out.active = { ...(newer.active || {}) }; out.settings = { ...a.settings, ...(newer.settings || {}) };
   out.kana = { ...a.kana }; for (const [k, v] of Object.entries(b.kana || {})) { const o = out.kana[k]; if (!o || v.n > o.n) out.kana[k] = v; }
   const cu = new Map(); for (const c of [...(a.custom || []), ...(b.custom || [])]) cu.set(c.id, c); out.custom = [...cu.values()];
+  out.plan = { ...(a.plan || {}) }; for (const [k, v] of Object.entries(b.plan || {})) if (!out.plan[k] || (v.t || 0) > (out.plan[k].t || 0)) out.plan[k] = v;
   out.updated = Math.max(a.updated || 0, b.updated || 0);
   return out;
 }
@@ -188,7 +189,7 @@ async function route() {
   const [path, qs] = h.split('?');
   const q = Object.fromEntries(new URLSearchParams(qs || ''));
   const top = path.split('/')[1];
-  $$('#nav a[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === ({ vocab: 'learn', kanji: 'learn', grammar: 'learn', kana: 'learn', review: 'today', read: 'exam', mock: 'exam' }[top] || top)));
+  $$('#nav a[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === ({ vocab: 'learn', kanji: 'learn', grammar: 'learn', kana: 'learn', plan: 'learn', review: 'today', read: 'exam', mock: 'exam' }[top] || top)));
   for (const [re, fn] of routes) { const m = path.match(re); if (m) { try { await fn(...m.slice(1).map(decodeURIComponent), q); } catch (e) { main.innerHTML = `<div class="status err">${esc(e.message)}</div>`; console.error(e); } main.focus({ preventScroll: true }); return; } }
   location.hash = '#/today';
 }
@@ -222,10 +223,11 @@ on(/^\/today$/, async () => {
       <div class="muted small">Hôm nay: ${t.rev} lượt ôn · ${t.neu} thẻ mới · ${t.rev ? Math.round(100 * t.ok / t.rev) : 0}% nhớ</div></div>
     </section>
   </div>
+  ${await todayPlanHTML()}
   <h2>Luyện nhanh</h2>
   <div class="grid-hub">
     <a class="hub" href="#/mock"><span class="glyph">試</span><div><h3>Đề thi thử N1</h3><p>Từ vựng, kanji, ngữ pháp và đọc hiểu, có tính giờ</p></div></a>
-    <a class="hub" href="#/read"><span class="glyph">読</span><div><h3>Luyện đọc hiểu</h3><p>55 bài: 短文, 中文, 長文, 比較, 検索</p></div></a>
+    <a class="hub" href="#/read"><span class="glyph">読</span><div><h3>Luyện đọc hiểu</h3><p>56 bài: 短文, 中文, 長文, 比較, 検索</p></div></a>
     <a class="hub" href="#/kana"><span class="glyph">あ</span><div><h3>Hiragana / Katakana</h3><p>Trắc nghiệm nhận diện kana</p></div></a>
   </div>
   ${!GH.ok() ? `<div class="status info" style="margin-top:20px">Tiến độ đang chỉ lưu trên thiết bị này. <a href="#/settings">Kết nối GitHub</a> để lưu lên GitHub và dùng chung giữa máy tính và điện thoại.</div>` : ''}`;
@@ -242,6 +244,7 @@ on(/^\/learn$/, async () => {
     <a class="hub" href="#/kanji"><span class="glyph">漢</span><div><h3>Kanji N1</h3><p>${K.length} chữ theo 21 chương · đã học ${cnt('k:')}</p></div></a>
     <a class="hub" href="#/grammar"><span class="glyph">文</span><div><h3>Ngữ pháp</h3><p>${G.length} mẫu câu · đã học ${cnt('g:')}</p></div></a>
     <a class="hub" href="#/kana"><span class="glyph">あ</span><div><h3>Hiragana / Katakana</h3><p>Bảng chữ và trắc nghiệm</p></div></a>
+    <a class="hub" href="#/plan"><span class="glyph">道</span><div><h3>Lộ trình 28 tuần</h3><p>Lịch học lớp N1 Dũng Mori, đánh dấu từng ngày</p></div></a>
   </div>`;
 });
 
@@ -269,9 +272,10 @@ on(/^\/vocab$/, async (q) => {
     $('#vres').innerHTML = r.length ? `<div class="words">${r.map(wordRow).join('')}</div>` : '<p class="muted">Không tìm thấy từ nào.</p>';
   });
 });
+const exHTML = (i, n) => (i.ex || []).slice(0, n).map((e, k) => `<div class="ex">${esc(e)}${i.exvi?.[k] ? `<div class="exvi">${esc(i.exvi[k])}</div>` : ''}</div>`).join('');
 function wordRow(i) {
   return `<div class="word"><div><div class="w">${esc(i.w)}</div><div class="r">${esc(i.r)}${i.hv ? ' · ' + esc(i.hv) : ''}</div></div>
-  <div class="m">${esc(i.m)}${(i.ex || []).slice(0, 2).map(e => `<div class="ex">${esc(e)}</div>`).join('')}</div>${sayBtn(i.r || i.w)}</div>`;
+  <div class="m">${esc(i.m)}${exHTML(i, 2)}</div>${sayBtn(i.r || i.w)}</div>`;
 }
 on(/^\/vocab\/([\w-]+)$/, async (id) => {
   const d = (await decks()).find(x => x.id === id); if (!d) throw new Error('Không tìm thấy bài');
@@ -349,6 +353,61 @@ on(/^\/grammar\/([\w]+)$/, async (id) => {
   <div class="row" style="margin-top:16px">${prev ? `<a class="btn" href="#/grammar/${prev.id}">‹ <span class="jp">${esc(prev.title)}</span></a>` : ''}<span class="spacer"></span>${next ? `<a class="btn" href="#/grammar/${next.id}"><span class="jp">${esc(next.title)}</span> ›</a>` : ''}</div>`;
 });
 
+on(/^\/grammar\/ch\/(\d+)$/, async (c) => {
+  const gs = (await load('grammar')).filter(g => g.set === 'book' && g.ch === +c);
+  main.innerHTML = `<a class="crumb" href="#/grammar">‹ Ngữ pháp</a><h1>Ngữ pháp · Chương ${c}</h1><p class="lead">${gs.length} mẫu</p>
+  <div class="list">${gs.map(g => `<a class="item" href="#/grammar/${g.id}"><div class="body"><b class="jp">${esc(g.title)}</b><div class="sub">${esc(g.mean)}</div></div></a>`).join('')}</div>`;
+});
+
+/* ---------------- Lộ trình ---------------- */
+const READMAP = { '短文': 'tanbun', '中文': 'chuubun', '長文': 'choubun', '比較': 'hikaku', '情報検索': 'kensaku' };
+function linkPlan(t, secs) {
+  let h = esc(t);
+  h = h.replace(/(Kanji\s*(?:[Cc]hương|C)\s*)(\d+)/g, (m, a, n) => `<a href="#/kanji/${n}">${a}${n}</a>`);
+  h = h.replace(/(NP\s*(?:[Cc]hương|C)\s*)(\d+)/g, (m, a, n) => `<a href="#/grammar/ch/${n}">${a}${n}</a>`);
+  h = h.replace(/(?<![\d/.])([1-6]\.\d{1,2})(?![\d/])/g, (m, sec) => secs.has(sec) ? `<a href="#/vocab/dm${sec.replace('.', '_')}">${sec}</a>` : m);
+  h = h.replace(/(短文|中文|長文|比較|情報検索)\s*(\d+)/g, (m, k, n) => `<a href="#/read/${READMAP[k]}${n}">${k}${n}</a>`);
+  return h.replace(/\n-{3,}\n?/g, '<hr>').replace(/\n/g, '<br>');
+}
+function planDate(w, d) { const st = S.settings.planStart; if (!st) return null; const t = new Date(st + 'T00:00:00'); t.setDate(t.getDate() + (w - 1) * 7 + d); return t; }
+function mondayOf(d = new Date()) { const t = new Date(d); t.setHours(0, 0, 0, 0); t.setDate(t.getDate() - (t.getDay() + 6) % 7); return t; }
+async function todayPlanHTML() {
+  if (!S.settings.planStart) return '';
+  const P = await load('plan'); const secs = new Set((await load('vocab')).filter(d => d.sec).map(d => d.sec));
+  const diff = Math.round((startOfDay() - new Date(S.settings.planStart + 'T00:00:00').getTime()) / DAY);
+  const w = Math.floor(diff / 7) + 1, d = diff % 7;
+  const wk = P.weeks[w - 1]; if (diff < 0 || !wk) return '';
+  const day = wk.days[d]; if (!day?.text) return '';
+  const done = S.plan[day.id]?.done;
+  return `<h2>Lộ trình hôm nay · Tuần ${w}</h2><div class="panel plan-today ${done ? 'done' : ''}"><div class="plan-text">${linkPlan(day.text, secs)}</div>
+    <div class="row" style="margin-top:12px"><button class="btn sm ${done ? '' : 'primary'}" onclick="togglePlan('${day.id}')">${done ? 'Bỏ đánh dấu' : 'Đánh dấu đã xong'}</button><a class="btn sm" href="#/plan?w=${w}">Xem cả tuần</a></div></div>`;
+}
+window.togglePlan = id => { const v = S.plan[id]; S.plan[id] = { done: !(v && v.done), t: Date.now() }; save(); route(); };
+on(/^\/plan$/, async (q) => {
+  const P = await load('plan'); const secs = new Set((await load('vocab')).filter(d => d.sec).map(d => d.sec));
+  const DOW = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
+  const total = P.weeks.reduce((a, w) => a + w.days.filter(d => d.text).length, 0);
+  const done = Object.values(S.plan).filter(v => v.done).length;
+  const todayT = startOfDay();
+  main.innerHTML = `<a class="crumb" href="#/learn">‹ Học</a><h1>Lộ trình học N1</h1><p class="lead">${esc(P.title.replace(/\s*\(KG.*$/, ''))} · đã xong ${done}/${total} buổi</p>
+  <div class="panel" style="margin-bottom:16px"><div class="row"><label for="ps"><b>Ngày bắt đầu (thứ 2 của tuần 1)</b></label>
+   <input id="ps" type="date" value="${S.settings.planStart || ''}" class="date-in"><button class="btn sm" id="psNow">Bắt đầu từ tuần này</button>
+   ${S.settings.planStart ? '<button class="btn sm ghost" id="psClear">Bỏ ngày</button>' : ''}</div>
+   <p class="muted small" style="margin:8px 0 0">Đặt ngày bắt đầu để ứng dụng tính ngày cho từng buổi và hiện việc cần làm trên trang Hôm nay. Bấm vào chữ xanh để mở đúng bài trong ứng dụng.</p></div>
+  <div class="bar" style="margin-bottom:18px"><i style="width:${100 * done / total}%"></i></div>
+  ${P.weeks.map(w => { const wd = w.days.filter(d => d.text); const wdone = wd.filter(d => S.plan[d.id]?.done).length;
+    const isNow = w.days.some((d, i) => planDate(w.n, i)?.getTime() === todayT);
+    return `<details class="box week" id="wk${w.n}" ${(q.w ? +q.w === w.n : isNow) ? 'open' : ''}><summary>Tuần ${w.n}${planDate(w.n, 0) ? ` <span class="muted small">· ${planDate(w.n, 0).toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric' })}–${planDate(w.n, 6).toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric' })}</span>` : ''} <span class="tag ${wdone === wd.length ? 'on' : ''}">${wdone}/${wd.length}</span></summary>
+    <div class="days">${w.days.map((d, i) => { if (!d.text) return ''; const dt = planDate(w.n, i); const ok = S.plan[d.id]?.done; const off = /^NGHỈ/.test(d.text);
+      return `<div class="day ${ok ? 'done' : ''} ${dt?.getTime() === todayT ? 'today' : ''} ${off ? 'off' : ''}"><label class="chk"><input type="checkbox" data-d="${d.id}" ${ok ? 'checked' : ''} ${off ? 'disabled' : ''}><span><b>${DOW[i]}</b>${dt ? ` <span class="muted small">${dt.toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric' })}</span>` : ''}</span></label><div class="plan-text">${linkPlan(d.text, secs)}</div></div>`; }).join('')}</div></details>`; }).join('')}
+  ${P.note ? `<p class="muted small">${esc(P.note)}</p>` : ''}`;
+  $$('[data-d]').forEach(c => c.onchange = () => { S.plan[c.dataset.d] = { done: c.checked, t: Date.now() }; save(); c.closest('.day').classList.toggle('done', c.checked); });
+  $('#ps').onchange = e => { S.settings.planStart = e.target.value; save(); route(); };
+  $('#psNow').onclick = () => { S.settings.planStart = todayKey(mondayOf()); save(); route(); };
+  $('#psClear')?.addEventListener('click', () => { S.settings.planStart = ''; save(); route(); });
+  if (q.w) document.getElementById('wk' + q.w)?.scrollIntoView();
+});
+
 /* ---------------- Thẻ ôn tập ---------------- */
 function cardHTML(x, flipped) {
   const it = x.it;
@@ -357,7 +416,7 @@ function cardHTML(x, flipped) {
     return `<span class="kind tag">Từ vựng</span><span class="say">${sayBtn(it.r || it.w)}</span>
       <div class="front ${long ? 'long' : ''}">${esc(it.w)}</div>
       ${flipped ? `<div class="back">${it.r ? `<div class="reading">${esc(it.r)}</div>` : ''}${it.hv ? `<div class="hv">${esc(it.hv)}</div>` : ''}
-      <div class="meaning">${esc(it.m)}</div>${(it.ex || []).length ? `<ul class="exs">${it.ex.slice(0, 3).map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</div>` : ''}`;
+      <div class="meaning">${esc(it.m)}</div>${(it.ex || []).length ? `<ul class="exs">${it.ex.slice(0, 3).map((e, k) => `<li>${esc(e)}${it.exvi?.[k] ? `<div class="exvi">${esc(it.exvi[k])}</div>` : ''}</li>`).join('')}</ul>` : ''}</div>` : ''}`;
   }
   if (x.type === 'k') {
     return `<span class="kind tag">Kanji</span><span class="say">${sayBtn(it.ex[0] || it.k)}</span><div class="front kanji">${esc(it.k)}</div>
