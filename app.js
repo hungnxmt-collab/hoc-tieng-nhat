@@ -465,7 +465,8 @@ on(/^\/kanji$/, async () => {
   $('#ks').oninput = e => { const t = e.target.value.trim().toLowerCase(); $('#klist').classList.toggle('hidden', !!t);
     $('#kres').innerHTML = t ? `<div class="words">${K.filter(k => (k.k + k.hv + k.on + k.kun).toLowerCase().includes(t)).slice(0, 60).map(kanjiRow).join('') || ''}</div>` : ''; };
 });
-const kanjiRow = k => `<div class="word"><div><div class="w" style="font-size:2rem">${sayT(k.k)}</div><div class="r">${esc(k.hv)}</div></div><div class="m"><div class="small">On: <span class="jp">${sayList(k.on)}</span> · Kun: <span class="jp">${sayList(k.kun)}</span></div>${k.ex.map(e => `<div class="ex">${sayT(e)}</div>`).join('')}${k.tip ? `<div class="small muted">💡 ${sayT(k.tip)}</div>` : ''}</div>${sayAllBtn([k.k, k.on, k.kun.replace(/[()（）]/g, ''), ...k.ex])}</div>`;
+const exVi = (k, i) => k.exm && k.exm[i] ? ` <span class="exvi">— ${esc(k.exm[i])}</span>` : '';
+const kanjiRow = k => `<div class="word"><div><div class="w" style="font-size:2rem">${sayT(k.k)}</div><div class="r">${esc(k.hv)}</div>${k.m ? `<div class="kvi">${esc(k.m)}</div>` : ''}</div><div class="m"><div class="small">On: <span class="jp">${sayList(k.on)}</span> · Kun: <span class="jp">${sayList(k.kun)}</span></div>${k.ex.map((e, i) => `<div class="ex">${sayT(e)}${exVi(k, i)}</div>`).join('')}${k.tip ? `<div class="small muted">💡 ${sayT(k.tip)}${k.tipm ? `<div class="tipvi">→ ${esc(k.tipm)}</div>` : ''}</div>` : ''}</div>${sayAllBtn([k.k, k.on, k.kun.replace(/[()（）]/g, ''), ...k.ex])}</div>`;
 on(/^\/kanji\/(\d+)$/, async (c) => {
   c = +c; const ks = (await load('kanji')).filter(k => k.ch === c); const act = !!S.active['k:' + c];
   main.innerHTML = `<a class="crumb" href="#/kanji">‹ Kanji</a><h1>Kanji · Chương ${c}</h1><p class="lead">${ks.length} chữ</p>
@@ -576,9 +577,9 @@ function cardHTML(x, flipped) {
   }
   if (x.type === 'k') {
     return `<span class="kind tag">Kanji</span><span class="say">${sayBtn(it.ex[0] || it.k)}</span><div class="front kanji">${esc(it.k)}</div>
-      ${flipped ? `<div class="back"><div class="hv" style="font-size:1.1rem">${esc(it.hv)}</div>
+      ${flipped ? `<div class="back"><div class="hv" style="font-size:1.1rem">${esc(it.hv)}</div>${it.m ? `<div class="kvi">${esc(it.m)}</div>` : ''}
       <div class="small">On: <span class="jp">${sayList(it.on)}</span> · Kun: <span class="jp">${sayList(it.kun)}</span></div>
-      <ul class="exs">${it.ex.map(e => `<li>${sayT(e)}</li>`).join('')}</ul>${it.tip ? `<div class="note">💡 <span class="jp">${esc(it.tip)}</span></div>` : ''}</div>` : ''}`;
+      <ul class="exs">${it.ex.map((e, i) => `<li>${sayT(e)}${exVi(it, i)}</li>`).join('')}</ul>${it.tip ? `<div class="note">💡 <span class="jp">${sayT(it.tip)}</span>${it.tipm ? `<div class="tipvi">→ ${esc(it.tipm)}</div>` : ''}</div>` : ''}</div>` : ''}`;
   }
   return `<span class="kind tag">Ngữ pháp</span><div class="front long">${esc(it.title)}</div>
     ${flipped ? `<div class="back"><div class="note" style="width:100%">${grammarBody(it)}</div></div>` : ''}`;

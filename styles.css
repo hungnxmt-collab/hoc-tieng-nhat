@@ -323,3 +323,8 @@ main:focus,#main:focus{outline:none}
 .say-t{cursor:pointer;border-radius:4px;padding:0 1px;text-decoration:underline dotted transparent;text-underline-offset:4px;transition:background .15s}
 .say-t:hover{text-decoration-color:var(--indigo-2);background:var(--surface-2)}
 .say-t.on{background:#fde9a8;color:#222}
+
+.exvi{color:var(--muted,#6b7280);font-size:.85em;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.kvi{font-size:.85rem;color:var(--accent,#2563eb);font-weight:600;margin-top:2px;max-width:9em;line-height:1.25}
+.back .kvi{max-width:none;font-size:1rem}
+.tipvi{font-size:.85em;color:var(--muted,#6b7280);margin-top:2px}
