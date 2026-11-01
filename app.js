@@ -93,7 +93,7 @@ function speak(t) {
   if (!('speechSynthesis' in window)) return toast('Trình duyệt không hỗ trợ đọc');
   speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(String(t).replace(/[／/].*$/, '')); u.lang = 'ja-JP'; if (jaVoice) u.voice = jaVoice; u.rate = .9; speechSynthesis.speak(u);
 }
-document.addEventListener('click', e => { const b = e.target.closest('[data-say]'); if (b) { e.preventDefault(); e.stopPropagation(); speak(b.dataset.say); } });
+document.addEventListener('click', e => { const b = e.target.closest('[data-say]'); if (b) { e.preventDefault(); e.stopPropagation(); speak(b.dataset.say); $$('.say-t.on').forEach(x => x.classList.remove('on')); if (b.classList.contains('say-t')) { b.classList.add('on'); setTimeout(() => b.classList.remove('on'), 1200); } } });
 // Âm thanh gốc (file nghe từ vựng): au = [phần, đầu, cuối, đầu-từ, cuối-từ]
 const AU = new Audio(); let auEnd = 0; AU.preload = 'none';
 AU.addEventListener('timeupdate', () => { if (auEnd && AU.currentTime >= auEnd) { AU.pause(); auEnd = 0; } });
@@ -105,6 +105,10 @@ function playClip(part, a, b) {
 }
 document.addEventListener('click', e => { const f = e.target.closest('[data-src]'); if (f) { e.preventDefault(); e.stopPropagation(); playClip(f.dataset.src, 0, 9999); return; } const b = e.target.closest('[data-au]'); if (b) { e.preventDefault(); e.stopPropagation(); const [p, x, y] = b.dataset.au.split(',').map(Number); playClip(p, x, y); } });
 const vSay = it => it.au3 ? `<span class="au-btns"><button class="icon-btn" data-src="${it.au3}" aria-label="Nghe từ và câu ví dụ (audio sách)" title="Nghe từ + câu ví dụ (audio sách)">${ICON.speak}</button></span>` : it.au ? `<span class="au-btns">${it.au[3] != null ? `<button class="icon-btn" data-au="${it.au[0]},${it.au[3]},${it.au[4]}" aria-label="Nghe từ (giọng người đọc)" title="Nghe từ (giọng người đọc)">${ICON.speak}</button>` : sayBtn(it.r || it.w)}<button class="icon-btn ex-au" data-au="${it.au[0]},${it.au[1]},${it.au[2]}" aria-label="Nghe từ và câu ví dụ" title="Nghe từ + câu ví dụ">例</button></span>` : sayBtn(it.r || it.w);
+// Chữ bấm để nghe: mỗi cụm là một vùng bấm riêng
+const sayT = (shown, spoken) => `<span class="say-t" data-say="${esc(String(spoken ?? shown).replace(/[-‐.]/g, '').replace(/[()（）]/g, ''))}" title="Bấm để nghe">${esc(shown)}</span>`;
+const sayList = (txt) => String(txt || '').split(/[、,，・\s]+/).filter(x => x.trim()).map(x => sayT(x)).join('<span class="muted">、</span>');
+const sayAllBtn = parts => `<button class="icon-btn" data-say="${esc(parts.filter(Boolean).map(p => String(p).replace(/[-‐.()（）]/g, '')).join('。'))}" aria-label="Đọc tất cả" title="Đọc tất cả">${ICON.speak}</button>`;
 const sayBtn = t => `<button class="icon-btn" data-say="${esc(t)}" aria-label="Nghe phát âm">${ICON.speak}</button>`;
 
 let toastT;
@@ -420,9 +424,9 @@ on(/^\/vocab$/, async (q) => {
     $('#vres').innerHTML = r.length ? `<div class="words">${r.map(wordRow).join('')}</div>` : '<p class="muted">Không tìm thấy từ nào.</p>';
   });
 });
-const exHTML = (i, n) => (i.ex || []).slice(0, n).map((e, k) => `<div class="ex">${esc(e)}${i.exvi?.[k] ? `<div class="exvi">${esc(i.exvi[k])}</div>` : ''}</div>`).join('');
+const exHTML = (i, n) => (i.ex || []).slice(0, n).map((e, k) => `<div class="ex">${sayT(e)}${i.exvi?.[k] ? `<div class="exvi">${esc(i.exvi[k])}</div>` : ''}</div>`).join('');
 function wordRow(i) {
-  return `<div class="word"><div><div class="w">${esc(i.w)}</div><div class="r">${esc(i.r)}${i.hv ? ' · ' + esc(i.hv) : ''}</div></div>
+  return `<div class="word"><div><div class="w">${sayT(i.w, i.r || i.w)}</div><div class="r">${i.r ? sayT(i.r) : ''}${i.hv ? ' · ' + esc(i.hv) : ''}</div></div>
   <div class="m">${esc(i.m)}${i.chk ? ' <span class="tag warn" title="Chữ nhận dạng tự động chưa khớp từ điển — hãy xem ảnh gốc">cần đối chiếu</span>' : ''}${exHTML(i, 2)}${(i.rel || []).map(r => `<div class="small muted">＋ <span class="jp">${esc(r)}</span></div>`).join('')}${i.img ? `<details class="small"><summary>Xem bản gốc</summary><img loading="lazy" src="${i.img}" alt="Mục từ trong sách" style="width:100%;max-width:640px;margin-top:4px;border:1px solid var(--line)"></details>` : ''}</div>${vSay(i)}</div>`;
 }
 on(/^\/vocab\/([\w-]+)$/, async (id) => {
@@ -461,7 +465,7 @@ on(/^\/kanji$/, async () => {
   $('#ks').oninput = e => { const t = e.target.value.trim().toLowerCase(); $('#klist').classList.toggle('hidden', !!t);
     $('#kres').innerHTML = t ? `<div class="words">${K.filter(k => (k.k + k.hv + k.on + k.kun).toLowerCase().includes(t)).slice(0, 60).map(kanjiRow).join('') || ''}</div>` : ''; };
 });
-const kanjiRow = k => `<div class="word"><div><div class="w" style="font-size:2rem">${esc(k.k)}</div><div class="r">${esc(k.hv)}</div></div><div class="m"><div class="small">On: <span class="jp">${esc(k.on)}</span> · Kun: <span class="jp">${esc(k.kun)}</span></div>${k.ex.slice(0, 3).map(e => `<div class="ex">${esc(e)}</div>`).join('')}</div>${sayBtn(k.ex[0] || k.k)}</div>`;
+const kanjiRow = k => `<div class="word"><div><div class="w" style="font-size:2rem">${sayT(k.k)}</div><div class="r">${esc(k.hv)}</div></div><div class="m"><div class="small">On: <span class="jp">${sayList(k.on)}</span> · Kun: <span class="jp">${sayList(k.kun)}</span></div>${k.ex.map(e => `<div class="ex">${sayT(e)}</div>`).join('')}${k.tip ? `<div class="small muted">💡 ${sayT(k.tip)}</div>` : ''}</div>${sayAllBtn([k.k, k.on, k.kun.replace(/[()（）]/g, ''), ...k.ex])}</div>`;
 on(/^\/kanji\/(\d+)$/, async (c) => {
   c = +c; const ks = (await load('kanji')).filter(k => k.ch === c); const act = !!S.active['k:' + c];
   main.innerHTML = `<a class="crumb" href="#/kanji">‹ Kanji</a><h1>Kanji · Chương ${c}</h1><p class="lead">${ks.length} chữ</p>
@@ -573,8 +577,8 @@ function cardHTML(x, flipped) {
   if (x.type === 'k') {
     return `<span class="kind tag">Kanji</span><span class="say">${sayBtn(it.ex[0] || it.k)}</span><div class="front kanji">${esc(it.k)}</div>
       ${flipped ? `<div class="back"><div class="hv" style="font-size:1.1rem">${esc(it.hv)}</div>
-      <div class="small">On: <span class="jp">${esc(it.on)}</span> · Kun: <span class="jp">${esc(it.kun)}</span></div>
-      <ul class="exs">${it.ex.map(e => `<li>${esc(e)}</li>`).join('')}</ul>${it.tip ? `<div class="note">💡 <span class="jp">${esc(it.tip)}</span></div>` : ''}</div>` : ''}`;
+      <div class="small">On: <span class="jp">${sayList(it.on)}</span> · Kun: <span class="jp">${sayList(it.kun)}</span></div>
+      <ul class="exs">${it.ex.map(e => `<li>${sayT(e)}</li>`).join('')}</ul>${it.tip ? `<div class="note">💡 <span class="jp">${esc(it.tip)}</span></div>` : ''}</div>` : ''}`;
   }
   return `<span class="kind tag">Ngữ pháp</span><div class="front long">${esc(it.title)}</div>
     ${flipped ? `<div class="back"><div class="note" style="width:100%">${grammarBody(it)}</div></div>` : ''}`;
@@ -605,7 +609,7 @@ on(/^\/review$/, async (q) => {
       ${!flipped ? `<button class="btn primary reveal" id="rev">Hiện đáp án <span class="muted small">(Space)</span></button>` :
         browse ? `<div class="row" style="margin-top:14px"><button class="btn" id="prevB">Thẻ trước</button><span class="spacer"></span><button class="btn primary" id="nextB">Tiếp theo</button></div>` :
         `<div class="grades">${[[1, 'Quên'], [2, 'Khó'], [3, 'Nhớ'], [4, 'Dễ']].map(([g, l]) => `<button class="g${g}" data-g="${g}"><b>${l}</b><small>${nextLabel(c, g)}</small></button>`).join('')}</div>`}`;
-    $('#rev')?.addEventListener('click', flip); $('#card').addEventListener('click', e => { if (!flipped && !e.target.closest('button')) flip(); });
+    $('#rev')?.addEventListener('click', flip); $('#card').addEventListener('click', e => { if (!flipped && !e.target.closest('button,[data-say]')) flip(); });
     $$('[data-g]').forEach(b => b.onclick = () => grade(+b.dataset.g));
     $('#nextB')?.addEventListener('click', () => { queue.push(queue.shift()); done++; flipped = false; if (done >= total) queue.length = 0; render(); });
     $('#prevB')?.addEventListener('click', () => { queue.unshift(queue.pop()); done = Math.max(0, done - 1); flipped = false; render(); });

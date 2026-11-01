@@ -320,3 +320,6 @@ main:focus,#main:focus{outline:none}
 .exbtns>div{display:flex;gap:6px;align-items:center}.exbtns .tag{margin-left:4px}
 @media (max-width:600px){.exbtns{width:100%;align-items:stretch}.exbtns>div{justify-content:flex-end}}
 @media (max-width:600px){.part-title{flex-wrap:wrap}.part-title .muted{flex-basis:100%}}
+.say-t{cursor:pointer;border-radius:4px;padding:0 1px;text-decoration:underline dotted transparent;text-underline-offset:4px;transition:background .15s}
+.say-t:hover{text-decoration-color:var(--indigo-2);background:var(--surface-2)}
+.say-t.on{background:#fde9a8;color:#222}
