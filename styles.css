@@ -270,3 +270,25 @@ details.gset>summary{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 :root[data-theme="dark"] .crop img{filter:invert(.88) hue-rotate(180deg)}
 .item.track.on{border-color:var(--indigo-2);box-shadow:inset 3px 0 0 var(--indigo-2)}
 .player{position:sticky;top:8px;z-index:5}
+
+/* Đề làm trên bản gốc + phiếu trả lời */
+.paper{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start}
+.paper-pages img{display:block;width:100%;height:auto;margin-bottom:12px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.paper-sheet{position:sticky;top:64px;max-height:calc(100vh - 80px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);padding:12px}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.sheet-head .btn,.sheet-fab{display:none}
+.pq-sec{margin-bottom:10px}.pq-title{font-weight:700;font-size:.9rem;margin:6px 0}
+.q.pq{display:flex;align-items:center;gap:8px;margin:0 0 6px;padding:4px 0;border:0;background:none}
+.q.pq .pn{width:2.2em;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.q.pq .opts.nums{flex:1;gap:4px;margin:0}.q.pq .opt{padding:4px 0;min-height:32px}
+@media (max-width:900px){.paper{display:block}
+ .paper-sheet{position:fixed;left:0;right:0;bottom:0;top:auto;max-height:70vh;border-radius:16px 16px 0 0;z-index:30;transform:translateY(105%);transition:transform .25s;box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+ .paper-sheet.open{transform:none}.sheet-head .btn{display:inline-flex}
+ .sheet-fab{display:inline-flex;position:fixed;right:16px;bottom:84px;z-index:25;box-shadow:0 6px 18px rgba(0,0,0,.2)}}
+.au-btns{display:inline-flex;gap:4px;align-items:center}
+.icon-btn.ex-au{font-family:var(--jp);font-size:.85rem;font-weight:700;color:var(--shu,#c0392b)}
+.tx-wrap{margin-top:10px}.tx-wrap summary{cursor:pointer}
+.transcript{max-height:42vh;overflow:auto;position:relative;margin-top:6px;padding:6px 8px;border:1px solid var(--line);border-radius:var(--radius-s,6px);background:var(--bg)}
+.transcript p{margin:0;padding:3px 6px;border-radius:4px;cursor:pointer;line-height:1.7}
+.transcript p:hover{background:var(--surface)}.transcript p.on{background:var(--indigo-2);color:#fff}
+.player{position:static}

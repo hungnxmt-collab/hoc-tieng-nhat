@@ -94,6 +94,17 @@ function speak(t) {
   speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(String(t).replace(/[／/].*$/, '')); u.lang = 'ja-JP'; if (jaVoice) u.voice = jaVoice; u.rate = .9; speechSynthesis.speak(u);
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-say]'); if (b) { e.preventDefault(); e.stopPropagation(); speak(b.dataset.say); } });
+// Âm thanh gốc (file nghe từ vựng): au = [phần, đầu, cuối, đầu-từ, cuối-từ]
+const AU = new Audio(); let auEnd = 0; AU.preload = 'none';
+AU.addEventListener('timeupdate', () => { if (auEnd && AU.currentTime >= auEnd) { AU.pause(); auEnd = 0; } });
+function playClip(part, a, b) {
+  const src = `audio/vocab/part${String(part).padStart(2, '0')}.mp3`;
+  speechSynthesis?.cancel?.(); auEnd = b;
+  const go = () => { AU.currentTime = a; AU.play().catch(() => { }); };
+  if (!AU.src.endsWith(src)) { AU.src = src; AU.addEventListener('loadedmetadata', go, { once: true }); AU.load(); } else go();
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-au]'); if (b) { e.preventDefault(); e.stopPropagation(); const [p, x, y] = b.dataset.au.split(',').map(Number); playClip(p, x, y); } });
+const vSay = it => it.au ? `<span class="au-btns">${it.au[3] != null ? `<button class="icon-btn" data-au="${it.au[0]},${it.au[3]},${it.au[4]}" aria-label="Nghe từ (giọng người đọc)" title="Nghe từ (giọng người đọc)">${ICON.speak}</button>` : sayBtn(it.r || it.w)}<button class="icon-btn ex-au" data-au="${it.au[0]},${it.au[1]},${it.au[2]}" aria-label="Nghe từ và câu ví dụ" title="Nghe từ + câu ví dụ">例</button></span>` : sayBtn(it.r || it.w);
 const sayBtn = t => `<button class="icon-btn" data-say="${esc(t)}" aria-label="Nghe phát âm">${ICON.speak}</button>`;
 
 let toastT;
@@ -278,7 +289,7 @@ on(/^\/vocab$/, async (q) => {
 const exHTML = (i, n) => (i.ex || []).slice(0, n).map((e, k) => `<div class="ex">${esc(e)}${i.exvi?.[k] ? `<div class="exvi">${esc(i.exvi[k])}</div>` : ''}</div>`).join('');
 function wordRow(i) {
   return `<div class="word"><div><div class="w">${esc(i.w)}</div><div class="r">${esc(i.r)}${i.hv ? ' · ' + esc(i.hv) : ''}</div></div>
-  <div class="m">${esc(i.m)}${exHTML(i, 2)}</div>${sayBtn(i.r || i.w)}</div>`;
+  <div class="m">${esc(i.m)}${exHTML(i, 2)}</div>${vSay(i)}</div>`;
 }
 on(/^\/vocab\/([\w-]+)$/, async (id) => {
   const d = (await decks()).find(x => x.id === id); if (!d) throw new Error('Không tìm thấy bài');
@@ -419,7 +430,7 @@ function cardHTML(x, flipped) {
   const it = x.it;
   if (x.type === 'v') {
     const long = it.w.length > 7;
-    return `<span class="kind tag">Từ vựng</span><span class="say">${sayBtn(it.r || it.w)}</span>
+    return `<span class="kind tag">Từ vựng</span><span class="say">${vSay(it)}</span>
       <div class="front ${long ? 'long' : ''}">${esc(it.w)}</div>
       ${flipped ? `<div class="back">${it.r ? `<div class="reading">${esc(it.r)}</div>` : ''}${it.hv ? `<div class="hv">${esc(it.hv)}</div>` : ''}
       <div class="meaning">${esc(it.m)}</div>${(it.ex || []).length ? `<ul class="exs">${it.ex.slice(0, 3).map((e, k) => `<li>${esc(e)}${it.exvi?.[k] ? `<div class="exvi">${esc(it.exvi[k])}</div>` : ''}</li>`).join('')}</ul>` : ''}</div>` : ''}`;
@@ -494,7 +505,7 @@ on(/^\/quiz$/, async (q) => {
     if (i >= qs.length) { main.innerHTML = `<div class="done"><div class="hanko"><div><b>${right}</b><span>/${qs.length}</span></div></div><h1>Kết quả: ${Math.round(100 * right / qs.length)}%</h1><div class="row" style="justify-content:center"><a class="btn" href="#/vocab/${d.id}">Quay lại bài</a><button class="btn primary" id="again">Làm lại</button></div></div>`; $('#again').onclick = () => route(); return; }
     const it = qs[i]; const opts = shuffle([it, ...pick(pool.filter(x => x.m !== it.m).length >= 3 ? pool.filter(x => x.m !== it.m) : all.filter(x => x.m !== it.m), 3)]);
     main.innerHTML = `<div class="session-top"><a class="btn sm ghost" href="#/vocab/${d.id}">✕</a><div class="prog"><i style="width:${100 * i / qs.length}%"></i></div><span class="small muted">${i + 1}/${qs.length}</span></div>
-    <div class="card" style="min-height:200px"><span class="say">${sayBtn(it.r || it.w)}</span><div class="front ${it.w.length > 7 ? 'long' : ''}">${esc(it.w)}</div></div>
+    <div class="card" style="min-height:200px"><span class="say">${vSay(it)}</span><div class="front ${it.w.length > 7 ? 'long' : ''}">${esc(it.w)}</div></div>
     <div class="choices wide">${opts.map(o => `<button class="choice" data-ok="${o === it}">${esc(o.m)}</button>`).join('')}</div>`;
     $$('.choice').forEach(b => b.onclick = () => {
       const ok = b.dataset.ok === 'true'; if (ok) right++;
@@ -613,13 +624,15 @@ on(/^\/audio$/, async (q) => {
   main.innerHTML = `<a class="crumb" href="#/learn">‹ Học</a><h1>Nghe</h1><p class="lead">Bấm một bài để phát. Ứng dụng nhớ chỗ bạn đang nghe ở từng bài và tự chuyển sang bài kế tiếp.</p>
   <div class="panel player"><div class="jp" id="now" style="font-weight:700"></div>
    <audio id="au" controls preload="metadata" style="width:100%;margin:10px 0"></audio>
-   <div class="row"><button class="btn sm" id="back">−10s</button><button class="btn sm" id="fwd">+10s</button><span class="spacer"></span><span class="small muted">Tốc độ</span><div class="seg" id="spd">${[0.75, 1, 1.25, 1.5].map(v => `<button data-v="${v}">${v}×</button>`).join('')}</div></div></div>
+   <div class="row"><button class="btn sm" id="back">−10s</button><button class="btn sm" id="fwd">+10s</button><span class="spacer"></span><span class="small muted">Tốc độ</span><div class="seg" id="spd">${[0.75, 1, 1.25, 1.5].map(v => `<button data-v="${v}">${v}×</button>`).join('')}</div></div>
+   <details class="tx-wrap" id="txw" open><summary class="small">Bản chép lời <span class="muted">(tự động — chạm một dòng để nghe từ đó)</span></summary><div class="transcript jp" id="tx"></div></details></div>
   ${A.map(g => `<h2>${esc(g.title)}</h2><p class="small muted">${esc(g.desc)}</p><div class="list">${g.tracks.map(t => `<a class="item track" href="javascript:void 0" data-f="${t.f}"><div class="glyph" style="font-size:.9rem;font-family:var(--ui)">▶</div><div class="body"><b>${esc(t.t)}</b><div class="sub">${fmt(t.d)}${pos[t.f] ? ' · đang nghe ở ' + fmt(pos[t.f]) : ''}</div></div></a>`).join('')}</div>`).join('')}`;
   const au = $('#au'); let rate = 1; try { rate = +localStorage.getItem('n1.rate') || 1; } catch { }
   const setRate = v => { rate = v; au.playbackRate = v; $$('#spd button').forEach(b => b.classList.toggle('on', +b.dataset.v === v)); try { localStorage.setItem('n1.rate', v); } catch { } };
   const savePos = () => { if (!cur) return; pos[cur.f] = au.currentTime > cur.d - 3 ? 0 : au.currentTime; pos._last = cur.f; try { localStorage.setItem(PK, JSON.stringify(pos)); } catch { } };
   const open = (t, play) => {
     cur = t; au.src = t.f; $('#now').textContent = A.find(g => g.id === t.g).title + ' — ' + t.t;
+    $('#tx').innerHTML = (t.seg || []).map((x, k) => `<p data-k="${k}">${esc(x[2])}</p>`).join('') || '<p class="muted">Không có bản chép lời.</p>'; $('#txw').hidden = !(t.seg || []).length; lastK = -1;
     $$('.track').forEach(a => a.classList.toggle('on', a.dataset.f === t.f));
     au.onloadedmetadata = () => { if (pos[t.f]) au.currentTime = pos[t.f]; au.playbackRate = rate; if (play) au.play().catch(() => { }); };
   };
@@ -627,7 +640,13 @@ on(/^\/audio$/, async (q) => {
   $$('#spd button').forEach(b => b.onclick = () => setRate(+b.dataset.v));
   $('#back').onclick = () => au.currentTime = Math.max(0, au.currentTime - 10);
   $('#fwd').onclick = () => au.currentTime += 10;
-  let last = 0; au.ontimeupdate = () => { if (Date.now() - last > 4000) { last = Date.now(); savePos(); } };
+  let last = 0, lastK = -1; au.ontimeupdate = () => {
+    if (Date.now() - last > 4000) { last = Date.now(); savePos(); }
+    const sg = cur.seg || []; const ct = au.currentTime; let k = -1;
+    for (let i = 0; i < sg.length; i++) { if (sg[i][0] <= ct + .05) k = i; else break; }
+    if (k !== lastK) { lastK = k; $$('#tx p.on').forEach(p => p.classList.remove('on')); const p = k >= 0 && $(`#tx p[data-k="${k}"]`); if (p) { p.classList.add('on'); const box = $('#tx'); box.scrollTop = p.offsetTop - box.offsetTop - box.clientHeight / 3; } }
+  };
+  $('#tx').onclick = e => { const p = e.target.closest('p[data-k]'); if (!p) return; au.currentTime = cur.seg[+p.dataset.k][0]; au.play().catch(() => { }); };
   au.onended = () => { pos[cur.f] = 0; savePos(); const i = all.indexOf(cur); if (all[i + 1] && all[i + 1].g === cur.g) open(all[i + 1], true); };
   au.onratechange = () => { if (au.playbackRate !== rate) setRate(au.playbackRate); };
   setRate(rate); open(cur, false);
@@ -722,7 +741,7 @@ function cropHTML(img) {
 const numOpts = () => `<div class="opts nums">${[1, 2, 3, 4].map(j => `<button class="opt" data-a="${j}"><span class="n">${j}</span></button>`).join('')}</div>`;
 function testBlocks(sec, pfx) {
   const txt = scanTxt();
-  return sec.blocks.map(b => b.img && !txt ? (b.t === 'text' ? `<div class="passage scan">${cropHTML(b.img)}</div>` : `<div class="q scan" data-n="${pfx}${b.n}">${cropHTML(b.img)}${numOpts()}</div>`) :
+  return sec.blocks.map(b => b.pq ? `<div class="q pq" data-n="${pfx}${b.n}"><span class="pn">${b.n}</span>${numOpts()}</div>` : b.img && !txt ? (b.t === 'text' ? `<div class="passage scan">${cropHTML(b.img)}</div>` : `<div class="q scan" data-n="${pfx}${b.n}">${cropHTML(b.img)}${numOpts()}</div>`) :
     b.img && b.t === 'q' && b.o.length !== 4 ? `<div class="q scan" data-n="${pfx}${b.n}"><div class="qt">${b.n}．${b.q ? ul(b.q) : ''}</div>${cropHTML(b.img)}${numOpts()}</div>` :
     b.t === 'text' ? `<div class="passage">${jpParas(b.text)}</div>` : b.t === 'pre' ? `<pre class="passage pre">${esc(b.text)}</pre>` :
     `<div class="q" data-n="${pfx}${b.n}"><div class="qt">${b.n}．${b.q ? ul(b.q) : ''}</div><div class="opts" style="${b.o.every(o => o.length < 12) ? 'grid-template-columns:repeat(auto-fit,minmax(140px,1fr))' : ''}">${b.o.map((o, j) => `<button class="opt" data-a="${j + 1}"><span class="n">${j + 1}</span><span>${ul(o)}</span></button>`).join('')}</div></div>`).join('');
@@ -744,7 +763,11 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
   main.innerHTML = `<div class="timer">${timed ? `<span class="clock" id="clk"></span><span class="muted small">còn lại</span>` : `<span class="muted small">Chế độ luyện tập — chọn đáp án để xem đúng/sai</span>`}<span class="spacer"></span><span class="small muted" id="cnt"></span>${timed ? '<button class="btn sm primary" id="sub">Nộp bài</button>' : ''}</div>
   <a class="crumb" href="#/tests">‹ Danh sách đề</a><h1>${esc(E.title)}</h1><p class="muted">${esc(E.set)}</p>
   ${E.scan ? `<div class="row" style="margin-bottom:8px"><div class="seg" id="scanmode"><button data-m="0" class="${scanTxt() ? '' : 'on'}">Ảnh đề gốc</button><button data-m="1" class="${scanTxt() ? 'on' : ''}">Chữ (nhận dạng OCR)</button></div></div><p class="small muted">Đề scan: “Ảnh đề gốc” hiển thị đúng bản in; “Chữ” là văn bản nhận dạng tự động (có thể sai vài chữ, câu nào tách lỗi vẫn hiện ảnh gốc). Đáp án đã đối chiếu thủ công với bảng đáp án chính thức.</p>` : ''}
-  ${E.sections.map(s => `<div class="sec-title">問題${s.no}　<span class="jp" style="font-weight:500">${esc(s.instr)}</span></div>${testBlocks(s, '')}`).join('')}
+  ${E.paper ? `${E.note ? `<p class="small muted">${esc(E.note)}</p>` : ''}<p class="small muted">Đọc đề trên ảnh gốc, chọn đáp án trong phiếu trả lời${matchMedia('(max-width: 900px)').matches ? ' (nút “Phiếu trả lời” ở góc dưới)' : ' bên phải'}. Phần nghe hiểu không có file âm thanh nên không đưa vào.</p>
+  <div class="paper"><div class="paper-pages">${E.paper.map((u, i) => `<img loading="${i < 2 ? 'eager' : 'lazy'}" src="${u}" alt="Trang ${i + 1}">`).join('')}</div>
+  <div class="paper-sheet" id="sheet"><div class="sheet-head"><b>Phiếu trả lời</b><button class="btn sm ghost" id="sheetx">Đóng</button></div>${E.sections.map(s => `<div class="pq-sec"><div class="pq-title jp">問題${s.no} <span class="muted small">${esc(s.name)}</span></div>${testBlocks(s, '')}</div>`).join('')}</div></div>
+  <button class="btn primary sheet-fab" id="sheetbtn">Phiếu trả lời</button>` :
+  E.sections.map(s => `<div class="sec-title">問題${s.no}　<span class="jp" style="font-weight:500">${esc(s.instr)}</span></div>${testBlocks(s, '')}`).join('')}
   <div id="result"></div>${timed ? '<div style="margin-top:20px"><button class="btn primary" id="sub2">Nộp bài</button></div>' : ''}`;
   const all = E.sections.flatMap(s => s.blocks.filter(b => b.t === 'q').map(b => ({ ...b, sec: s.no })));
   const byN = Object.fromEntries(all.map(b => [b.n, b]));
@@ -759,6 +782,7 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
     counter();
   });
   counter();
+  if (E.paper) { $('#sheetbtn').onclick = () => $('#sheet').classList.add('open'); $('#sheetx').onclick = () => $('#sheet').classList.remove('open'); }
   $$('#scanmode button').forEach(b => b.onclick = () => { saveDraft(); try { localStorage.setItem('n1.scantxt', b.dataset.m); } catch { } cleanup && cleanup(); cleanup = null; route(); });
   if (timed) {
     const fmt = s => `${String(s / 60 | 0).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
