@@ -200,7 +200,7 @@ async function route() {
   const [path, qs] = h.split('?');
   const q = Object.fromEntries(new URLSearchParams(qs || ''));
   const top = path.split('/')[1];
-  $$('#nav a[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === ({ vocab: 'learn', kanji: 'learn', grammar: 'learn', kana: 'learn', plan: 'learn', keigo: 'learn', audio: 'learn', tests: 'exam', test: 'exam', drill: 'exam', review: 'today', read: 'exam', mock: 'exam' }[top] || top)));
+  $$('#nav a[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === ({ vocab: 'learn', kanji: 'learn', grammar: 'learn', kana: 'learn', plan: 'learn', keigo: 'learn', audio: 'learn', try: 'learn', tests: 'exam', test: 'exam', drill: 'exam', review: 'today', read: 'exam', mock: 'exam' }[top] || top)));
   for (const [re, fn] of routes) { const m = path.match(re); if (m) { try { await fn(...m.slice(1).map(decodeURIComponent), q); } catch (e) { main.innerHTML = `<div class="status err">${esc(e.message)}</div>`; console.error(e); } main.focus({ preventScroll: true }); return; } }
   location.hash = '#/today';
 }
@@ -257,6 +257,7 @@ on(/^\/learn$/, async () => {
     <a class="hub" href="#/grammar"><span class="glyph">文</span><div><h3>Ngữ pháp</h3><p>${G.length} mẫu câu · đã học ${cnt('g:')}</p></div></a>
     <a class="hub" href="#/kana"><span class="glyph">あ</span><div><h3>Hiragana / Katakana</h3><p>Bảng chữ và trắc nghiệm</p></div></a>
     <a class="hub" href="#/keigo"><span class="glyph">敬</span><div><h3>Kính ngữ</h3><p>34 động từ 尊敬語・謙譲語, quy tắc và trắc nghiệm</p></div></a>
+    <a class="hub" href="#/try"><span class="glyph">T</span><div><h3>Sách TRY! N1</h3><p>10 bài đọc/nghe, 123 mẫu ngữ pháp, まとめの問題 có đáp án và audio</p></div></a>
     <a class="hub" href="#/audio"><span class="glyph">聴</span><div><h3>Nghe</h3><p>5 giờ nghe từ vựng N1 + 41 track TRY! N1, nhớ vị trí đang nghe</p></div></a>
     <a class="hub" href="#/plan"><span class="glyph">道</span><div><h3>Lộ trình 28 tuần</h3><p>Lịch học lớp N1 Dũng Mori, đánh dấu từng ngày</p></div></a>
   </div>`;
@@ -337,7 +338,7 @@ on(/^\/kanji\/(\d+)$/, async (c) => {
 });
 
 /* ---------------- Ngữ pháp ---------------- */
-const GSETS = { book: 'Ngữ pháp N1 (giáo trình, 22 chương)', freq: 'Ngữ pháp hay xuất hiện trong đề thi', th: 'Tổng hợp ngữ pháp N1 (Thaolejp)', cn: 'Cẩm nang ngữ pháp N1 (Thaolejp)' };
+const GSETS = { book: 'Ngữ pháp N1 (giáo trình, 22 chương)', freq: 'Ngữ pháp hay xuất hiện trong đề thi', th: 'Tổng hợp ngữ pháp N1 (Thaolejp)', cn: 'Cẩm nang ngữ pháp N1 (Thaolejp)', try: 'TRY! N1 – 123 mẫu theo bài đọc (OCR từ sách)' };
 on(/^\/grammar$/, async () => {
   const G = await load('grammar');
   main.innerHTML = `<a class="crumb" href="#/learn">‹ Học</a><h1>Ngữ pháp</h1>
@@ -356,6 +357,7 @@ function grammarBody(g) {
   return `${g.form.length ? `<div class="form-box">${g.form.map(esc).join('<br>')}</div>` : ''}
   <p style="font-size:1.1rem;font-weight:500">${esc(g.mean).replace(/ • /g, '<br>')}</p>
   ${g.use.length ? `<h3>Cách dùng</h3><ul>${g.use.map(u => `<li>${esc(u)}</li>`).join('')}</ul>` : ''}
+  ${g.pg ? `<p class="small"><a href="#/try/p/${g.pg}">Xem trang sách gốc (tr. ${g.pg}) ›</a> <span class="muted">— phần giải thích và ví dụ dưới đây là chữ nhận dạng tự động, có thể sai vài chữ.</span></p>` : ''}
   ${g.ex.length ? `<h3>Ví dụ</h3><ol class="gram-ex">${g.ex.map((e, k) => `<li>${esc(e)} ${sayBtn(e).replace('icon-btn', 'icon-btn inline')}${g.exvi?.[k] ? `<div class="exvi">${esc(g.exvi[k])}</div>` : ''}</li>`).join('')}</ol>` : ''}
   ${(g.notes || []).map(n => `<div class="lesson-note"><h3>${esc(n.src)}</h3>
     <p><b>意味:</b> ${esc(n.mean)}</p>${n.form ? `<div class="form-box">${esc(n.form)}</div>` : ''}
@@ -614,6 +616,25 @@ on(/^\/read\/(\w+)$/, async (id) => {
   };
 });
 
+/* ---------------- Sách TRY! N1 ---------------- */
+on(/^\/try$/, async () => {
+  const B = await load('try'); const G = await load('grammar'); const gid = n => 'try' + n;
+  main.innerHTML = `<a class="crumb" href="#/learn">‹ Học</a><h1>Sách TRY! N1 <span class="muted" style="font-size:.9rem">文法から伸ばす日本語</span></h1>
+  <p class="lead">Mỗi bài gồm một bài đọc/nghe có audio, các mẫu ngữ pháp rút ra từ bài, và まとめの問題 ôn tập. Bấm số trang để xem trang sách gốc (có bài tập やってみよう!; đáp án ở phần 別冊 cuối sách).</p>
+  <div class="row" style="margin-bottom:12px"><a class="btn" href="#/grammar">Học 123 mẫu bằng thẻ (Ngữ pháp › TRY! N1)</a><a class="btn" href="#/try/p/11">Mục lục sách</a></div>
+  ${B.chapters.map(c => `<details class="grp" ${c.no === 1 && c.page === 16 ? 'open' : ''}><summary class="groupname"><span class="jp">${c.no}. ${esc(c.kind)}「${esc(c.title)}」</span> <span class="muted small">· tr. ${c.page}–${c.end}</span></summary>
+    <div class="row" style="margin:8px 0">${c.tracks.map(f => `<a class="btn sm" href="#/audio?f=${encodeURIComponent(f)}">▶ Nghe bài đọc</a>`).join('')}<a class="btn sm" href="#/try/p/${c.page}">Đọc trang ${c.page}</a>${c.matome ? `<a class="btn sm primary" href="#/test/trym${c.no}?mode=practice">まとめの問題</a>` : ''}</div>
+    <div class="list">${c.items.map(i => `<div class="item"><div class="glyph" style="font-size:.9rem;font-family:var(--ui)">${i.n}</div><div class="body"><a href="#/grammar/${gid(i.n)}"><b class="jp">～${esc(i.pat)}</b></a> <span class="small muted jp">${esc(i.ex)}</span><div class="sub">${esc(i.vi)}</div></div><a class="btn sm ghost" href="#/try/p/${i.page}">tr. ${i.page}</a></div>`).join('')}</div></details>`).join('')}
+  <h2>Phụ lục</h2><div class="list">${B.extra.map(x => `<a class="item" href="#/try/p/${x.page}"><div class="body"><b>${esc(x.title)}</b><div class="sub">tr. ${x.page}</div></div></a>`).join('')}</div>`;
+});
+on(/^\/try\/p\/(\d+)$/, async (n) => {
+  const B = await load('try'); n = Math.max(1, Math.min(B.pages, +n));
+  const nav = `<div class="row"><a class="btn sm" href="#/try/p/${n - 1}" ${n <= 1 ? 'hidden' : ''}>‹ Trang ${n - 1}</a><span class="spacer"></span><span class="small muted">Trang ${n}/${B.pages}</span><span class="spacer"></span><a class="btn sm" href="#/try/p/${n + 1}" ${n >= B.pages ? 'hidden' : ''}>Trang ${n + 1} ›</a></div>`;
+  main.innerHTML = `<a class="crumb" href="#/try">‹ Sách TRY! N1</a>${nav}<div class="crop-wrap book-page"><img src="img/try/p${String(n).padStart(3, '0')}.webp" alt="Trang ${n}"></div>${nav}`;
+  const k = e => { if (e.key === 'ArrowRight' && n < B.pages) location.hash = '#/try/p/' + (n + 1); if (e.key === 'ArrowLeft' && n > 1) location.hash = '#/try/p/' + (n - 1); };
+  document.addEventListener('keydown', k); cleanup = () => document.removeEventListener('keydown', k);
+});
+
 /* ---------------- Nghe ---------------- */
 on(/^\/audio$/, async (q) => {
   const A = await load('audio');
@@ -741,7 +762,7 @@ function cropHTML(img) {
 const numOpts = () => `<div class="opts nums">${[1, 2, 3, 4].map(j => `<button class="opt" data-a="${j}"><span class="n">${j}</span></button>`).join('')}</div>`;
 function testBlocks(sec, pfx) {
   const txt = scanTxt();
-  return sec.blocks.map(b => b.pq ? `<div class="q pq" data-n="${pfx}${b.n}"><span class="pn">${b.n}</span>${numOpts()}</div>` : b.img && !txt ? (b.t === 'text' ? `<div class="passage scan">${cropHTML(b.img)}</div>` : `<div class="q scan" data-n="${pfx}${b.n}">${cropHTML(b.img)}${numOpts()}</div>`) :
+  return sec.blocks.map(b => b.pq ? `<div class="q pq" data-n="${pfx}${b.n}"><span class="pn">${b.lab || b.n}</span>${numOpts()}</div>` : b.img && !txt ? (b.t === 'text' ? `<div class="passage scan">${cropHTML(b.img)}</div>` : `<div class="q scan" data-n="${pfx}${b.n}">${cropHTML(b.img)}${numOpts()}</div>`) :
     b.img && b.t === 'q' && b.o.length !== 4 ? `<div class="q scan" data-n="${pfx}${b.n}"><div class="qt">${b.n}．${b.q ? ul(b.q) : ''}</div>${cropHTML(b.img)}${numOpts()}</div>` :
     b.t === 'text' ? `<div class="passage">${jpParas(b.text)}</div>` : b.t === 'pre' ? `<pre class="passage pre">${esc(b.text)}</pre>` :
     `<div class="q" data-n="${pfx}${b.n}"><div class="qt">${b.n}．${b.q ? ul(b.q) : ''}</div><div class="opts" style="${b.o.every(o => o.length < 12) ? 'grid-template-columns:repeat(auto-fit,minmax(140px,1fr))' : ''}">${b.o.map((o, j) => `<button class="opt" data-a="${j + 1}"><span class="n">${j + 1}</span><span>${ul(o)}</span></button>`).join('')}</div></div>`).join('');
@@ -763,9 +784,9 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
   main.innerHTML = `<div class="timer">${timed ? `<span class="clock" id="clk"></span><span class="muted small">còn lại</span>` : `<span class="muted small">Chế độ luyện tập — chọn đáp án để xem đúng/sai</span>`}<span class="spacer"></span><span class="small muted" id="cnt"></span>${timed ? '<button class="btn sm primary" id="sub">Nộp bài</button>' : ''}</div>
   <a class="crumb" href="#/tests">‹ Danh sách đề</a><h1>${esc(E.title)}</h1><p class="muted">${esc(E.set)}</p>
   ${E.scan ? `<div class="row" style="margin-bottom:8px"><div class="seg" id="scanmode"><button data-m="0" class="${scanTxt() ? '' : 'on'}">Ảnh đề gốc</button><button data-m="1" class="${scanTxt() ? 'on' : ''}">Chữ (nhận dạng OCR)</button></div></div><p class="small muted">Đề scan: “Ảnh đề gốc” hiển thị đúng bản in; “Chữ” là văn bản nhận dạng tự động (có thể sai vài chữ, câu nào tách lỗi vẫn hiện ảnh gốc). Đáp án đã đối chiếu thủ công với bảng đáp án chính thức.</p>` : ''}
-  ${E.paper ? `${E.note ? `<p class="small muted">${esc(E.note)}</p>` : ''}<p class="small muted">Đọc đề trên ảnh gốc, chọn đáp án trong phiếu trả lời${matchMedia('(max-width: 900px)').matches ? ' (nút “Phiếu trả lời” ở góc dưới)' : ' bên phải'}. Phần nghe hiểu không có file âm thanh nên không đưa vào.</p>
+  ${E.paper ? `${E.note ? `<p class="small muted">${esc(E.note)}</p>` : ''}<p class="small muted">Đọc đề trên ảnh gốc, chọn đáp án trong phiếu trả lời${matchMedia('(max-width: 900px)').matches ? ' (nút “Phiếu trả lời” ở góc dưới)' : ' bên phải'}. ${E.sections.some(x => x.au) ? '' : 'Phần nghe hiểu không có file âm thanh nên không đưa vào.'}</p>
   <div class="paper"><div class="paper-pages">${E.paper.map((u, i) => `<img loading="${i < 2 ? 'eager' : 'lazy'}" src="${u}" alt="Trang ${i + 1}">`).join('')}</div>
-  <div class="paper-sheet" id="sheet"><div class="sheet-head"><b>Phiếu trả lời</b><button class="btn sm ghost" id="sheetx">Đóng</button></div>${E.sections.map(s => `<div class="pq-sec"><div class="pq-title jp">問題${s.no} <span class="muted small">${esc(s.name)}</span></div>${testBlocks(s, '')}</div>`).join('')}</div></div>
+  <div class="paper-sheet" id="sheet"><div class="sheet-head"><b>Phiếu trả lời</b><button class="btn sm ghost" id="sheetx">Đóng</button></div>${E.sections.map(s => `<div class="pq-sec"><div class="pq-title jp">${/^問題/.test(s.name) ? esc(s.name) : `問題${s.no} <span class="muted small">${esc(s.name)}</span>`}</div>${(s.au || []).map((u, k) => `<div class="pq-au"><span class="small muted">${s.au.length > 1 ? (k + 1) + '番' : 'Audio'}</span><audio controls preload="none" src="${u}"></audio></div>`).join('')}${testBlocks(s, '')}</div>`).join('')}${E.script ? `<details class="small" style="margin-top:8px"><summary>Đáp án chi tiết + script nghe (trang sách)</summary>${E.script.map(u => `<img loading="lazy" src="${u}" alt="Trang đáp án" style="width:100%;margin-top:6px">`).join('')}</details>` : ''}</div></div>
   <button class="btn primary sheet-fab" id="sheetbtn">Phiếu trả lời</button>` :
   E.sections.map(s => `<div class="sec-title">問題${s.no}　<span class="jp" style="font-weight:500">${esc(s.instr)}</span></div>${testBlocks(s, '')}`).join('')}
   <div id="result"></div>${timed ? '<div style="margin-top:20px"><button class="btn primary" id="sub2">Nộp bài</button></div>' : ''}`;

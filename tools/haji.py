@@ -146,10 +146,12 @@ def fix_word(cands, rd, hl=''):
     tail = re.sub(r'^[〈(（<《\s]+(する|な|の|に|と)\s*[〉)）>》]?.*', r'〈\1〉', tail)
     tail = re.sub(r'^[\[［]\s*(と|に)\s*[\]］」]?.*', r'［\1］', tail)
     tail = re.sub(r'^[\[［]\s*[ー~〜～-]+\s*ない.*', '［〜ない］', tail)
+    if tail and not re.fullmatch(r'〈(する|な|の|に|と)〉|［(と|に|〜ない)］', tail): tail = ''
     cores = [re.sub(r'する\)$', '', core(c)) if tail == '〈する〉' else core(c) for c in cands]
     cores = [c for c in cores if c]
     pool = set(cores)
     if hl:   # đoạn tô hồng trong câu ví dụ: thử các đoạn con + đuôi từ điển
+        hl = re.sub(r'ー(?=[一-龥])|(?<=[一-龥])ー(?=[一-龥])', '一', hl)
         hl = hl.lstrip('、。をがはにでとものへ')
         for a0 in range(min(2, len(hl))):
           for n in range(len(hl) - a0, 0, -1):
@@ -162,7 +164,9 @@ def fix_word(cands, rd, hl=''):
     def score(c):
         rs = readings(c); sim = max((difflib.SequenceMatcher(None, c, x).ratio() for x in cores), default=0)
         if c in ('する', 'な', 'の') : return -9
-        return (3 if rs else 0) + (3 if rd and len(rd) >= 2 and rd in rs else 0) + 3 * sim + (3 if hl and c[:max(1, len(c) - 2)] in hl else 0) + (1 if c in cores else 0) + .2 * min(len(c), 6)
+        stem = re.sub(r'[ぁ-ん]{1,2}$', '', c) if KAN.search(c) else c
+        inhl = bool(hl and stem and stem in hl)
+        return (3 if rs else 0) + (2 if rd and len(rd) >= 2 and rd in rs else 0) + 3 * sim + ((3 if len(stem) >= 2 or c in cores else 1) if inhl else 0) + (1.5 if inhl and len(stem) >= 2 and len(stem) >= len(re.sub(r'[ぁ-ん]+$', '', hl)) else 0) + (1 if c in cores else 0) + .2 * min(len(c), 6)
     if not pool: return '', rd
     best = max(sorted(pool), key=score)
     rs = readings(best)
@@ -226,7 +230,7 @@ def pos_icon(crop):
     ch = np.where(box > 185, 0, 255).astype(np.uint8)
     ch = cv2.copyMakeBorder(cv2.resize(ch, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC), 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=255)
     outs = []
-    for td in (BEST, FAST):
+    for td in (BEST,):
         r = subprocess.run(['tesseract', '-', '-', '--tessdata-dir', td, '-l', 'jpn', '--psm', '10'], input=cv2.imencode('.png', ch)[1].tobytes(), capture_output=True).stdout.decode()
         r = re.sub(r'\s', '', r)
         if r: outs.append(r)
@@ -296,7 +300,7 @@ def page(png):
     jp = collections.defaultdict(list); furi = {}; hls = {}
     for ci, (td, sc, th) in enumerate(JPN_CFG):
         for key in ('Lw', 'Rw'):
-            res = run_stacked(g, [e[key] for e in E], td, sc, th, 'jpn') if key == 'Rw' else [one(g, e[key], td, sc, th) for e in E]
+            res = run_stacked(g, [e[key] for e in E], td, sc, th, 'jpn') if key == 'Rw' else ([one(g, e[key], td, sc, th) for e in E] if ci < 2 else [[] for e in E])
             for i, ls in enumerate(res):
                 big = [l for l in ls if l['h'] >= 40]
                 if key == 'Lw':
@@ -334,7 +338,7 @@ def page(png):
             m = re.match(r'^\W*([一-龥々ぁ-んァ-ンー〈〉()（）]+)', t.replace(' ', ''))
             vm = re.search(r'/\s*([^/]*[A-Za-zÀ-ỹ][^/]*)$', t)
             if m and vm: pl.append(dict(w=m.group(1), vi=vnfix.fix_line(vm.group(1).strip())))
-        out.append(dict(n=e['n'], w=word, r=rd2 or rd, pos=e['pos'], vi=vi, ex=ex, exvi=exvi, plus=pl,
+        out.append(dict(n=e['n'], w=word, r=rd2 or rd, pos=e['pos'], hl=hls.get(i, ''), cands=jp[(i, 'Lw')], vi=vi, ex=ex, exvi=exvi, plus=pl,
                         img=[e['top'], e['p1'] + 6, x0t - 170, x1t + 8, W, H]))
     return out
 

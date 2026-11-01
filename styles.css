@@ -292,3 +292,7 @@ details.gset>summary{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 .transcript p{margin:0;padding:3px 6px;border-radius:4px;cursor:pointer;line-height:1.7}
 .transcript p:hover{background:var(--surface)}.transcript p.on{background:var(--indigo-2);color:#fff}
 .player{position:static}
+.pq-au{display:flex;align-items:center;gap:6px;margin:4px 0 8px}.pq-au audio{flex:1;height:34px;min-width:0}
+.book-page{margin:10px 0}.book-page img{display:block;width:100%;max-width:820px;margin:0 auto;border:1px solid var(--line);background:#fff}
+.crop-wrap.book-page.zoom img{max-width:none;width:1100px}
+main:focus,#main:focus{outline:none}
