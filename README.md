@@ -11,6 +11,8 @@ Web app chạy trên máy tính và điện thoại (cài được lên màn hì
 - **Hiragana / Katakana**: bảng chữ và trắc nghiệm, ưu tiên chữ hay sai.
 - **Đọc hiểu**: 156 bài (gồm 100 bài đọc hiểu N1 Thaolejp) (短文, 中文, 長文, 比較, 検索) với 145 câu hỏi có đáp án, xem kèm bản gốc.
 - **Đề thi đầy đủ**: 37 đề Thaolejp (36 đề thi thử + đề test đầu vào) và đề JLPT N1 12/2021 — 2.665 câu có đáp án; thi có giờ 110 phút hoặc luyện tập từng câu.
+- **Đề JLPT N1 thật 2010–2018** (18 đề, 1.262 câu, bản scan): nhận dạng chữ (OCR) từng đề, tách đúng 13 問題; đáp án đọc thủ công từ bảng đáp án chính thức và đối chiếu với OCR. Xem dạng ảnh đề gốc (cắt theo từng câu/đoạn) hoặc dạng chữ.
+- **Nghe**: 10 phần nghe từ vựng N1 (≈5 giờ) và 41 track TRY! N1; nhớ vị trí đang nghe, chỉnh tốc độ 0.75–1.5×.
 - **Bài tập có đáp án**: 2 bộ Test từ vựng-ngữ pháp (60 bài), 25 bài tập Cẩm nang ngữ pháp, 2 tài liệu bổ trợ đọc hiểu.
 - **Luyện theo dạng câu**: 13 dạng 問題 (漢字読み, 文脈規定, ★, đọc hiểu…) gom từ tất cả các đề.
 - **Kính ngữ**: bảng 34 động từ 尊敬語・謙譲語・丁寧語, quy tắc, lỗi hay gặp, trắc nghiệm.
@@ -19,7 +21,7 @@ Web app chạy trên máy tính và điện thoại (cài được lên màn hì
 - **Phát âm** bằng giọng đọc tiếng Nhật của trình duyệt.
 
 ## Dữ liệu lưu ở đâu
-- Nội dung học: thư mục `data/` (JSON) và `img/reading/` (ảnh trang đề gốc) trên nhánh `main`.
+- Nội dung học: thư mục `data/` (JSON), `data/scan/` (ảnh trang đề thật), `img/reading/` (ảnh trang đề gốc) và `audio/` (file nghe) trên nhánh `main`.
 - Tiến độ học: file `progress.json` trên nhánh `userdata` (ứng dụng tự tạo nhánh này khi đồng bộ lần đầu), ghi qua GitHub API bằng token của bạn.
   Tách nhánh để mỗi lần lưu tiến độ không làm GitHub Pages build lại trang.
 

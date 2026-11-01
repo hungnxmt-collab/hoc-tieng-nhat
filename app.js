@@ -189,10 +189,11 @@ async function route() {
   const [path, qs] = h.split('?');
   const q = Object.fromEntries(new URLSearchParams(qs || ''));
   const top = path.split('/')[1];
-  $$('#nav a[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === ({ vocab: 'learn', kanji: 'learn', grammar: 'learn', kana: 'learn', plan: 'learn', keigo: 'learn', tests: 'exam', test: 'exam', drill: 'exam', review: 'today', read: 'exam', mock: 'exam' }[top] || top)));
+  $$('#nav a[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === ({ vocab: 'learn', kanji: 'learn', grammar: 'learn', kana: 'learn', plan: 'learn', keigo: 'learn', audio: 'learn', tests: 'exam', test: 'exam', drill: 'exam', review: 'today', read: 'exam', mock: 'exam' }[top] || top)));
   for (const [re, fn] of routes) { const m = path.match(re); if (m) { try { await fn(...m.slice(1).map(decodeURIComponent), q); } catch (e) { main.innerHTML = `<div class="status err">${esc(e.message)}</div>`; console.error(e); } main.focus({ preventScroll: true }); return; } }
   location.hash = '#/today';
 }
+document.addEventListener('click', e => { const w = e.target.closest('.crop-wrap'); if (w) w.classList.toggle('zoom'); });
 window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
 
 /* ---------------- Hôm nay ---------------- */
@@ -245,6 +246,7 @@ on(/^\/learn$/, async () => {
     <a class="hub" href="#/grammar"><span class="glyph">文</span><div><h3>Ngữ pháp</h3><p>${G.length} mẫu câu · đã học ${cnt('g:')}</p></div></a>
     <a class="hub" href="#/kana"><span class="glyph">あ</span><div><h3>Hiragana / Katakana</h3><p>Bảng chữ và trắc nghiệm</p></div></a>
     <a class="hub" href="#/keigo"><span class="glyph">敬</span><div><h3>Kính ngữ</h3><p>34 động từ 尊敬語・謙譲語, quy tắc và trắc nghiệm</p></div></a>
+    <a class="hub" href="#/audio"><span class="glyph">聴</span><div><h3>Nghe</h3><p>5 giờ nghe từ vựng N1 + 41 track TRY! N1, nhớ vị trí đang nghe</p></div></a>
     <a class="hub" href="#/plan"><span class="glyph">道</span><div><h3>Lộ trình 28 tuần</h3><p>Lịch học lớp N1 Dũng Mori, đánh dấu từng ngày</p></div></a>
   </div>`;
 });
@@ -549,7 +551,7 @@ on(/^\/exam$/, async () => {
   const ex = S.exams.slice(-5).reverse();
   main.innerHTML = `<h1>Thi thử</h1><p class="lead">Luyện theo đề tổng hợp có tính giờ, hoặc từng bài đọc hiểu.</p>
   <div class="grid-hub">
-    <a class="hub" href="#/tests"><span class="glyph">本</span><div><h3>Đề thi & bài tập</h3><p>38 đề N1 đầy đủ + 87 bài test từ vựng, ngữ pháp, đọc hiểu — đều có đáp án</p></div></a>
+    <a class="hub" href="#/tests"><span class="glyph">本</span><div><h3>Đề thi & bài tập</h3><p>18 đề JLPT N1 thật 2010–2018 (bản scan) + 38 đề thi thử + 87 bài test — đều có đáp án</p></div></a>
     <a class="hub" href="#/drill"><span class="glyph">型</span><div><h3>Luyện theo dạng câu</h3><p>漢字読み, 文脈規定, ★, đọc hiểu… gom từ tất cả các đề</p></div></a>
     <a class="hub" href="#/mock"><span class="glyph">試</span><div><h3>Đề tự sinh ngẫu nhiên</h3><p>Trộn từ vựng, kanji, ngữ pháp + đọc hiểu, chấm theo phần</p></div></a>
     <a class="hub" href="#/read"><span class="glyph">読</span><div><h3>Luyện đọc hiểu</h3><p>${R.reduce((a, g) => a + g.sets.length, 0)} bài có đáp án</p></div></a>
@@ -599,6 +601,37 @@ on(/^\/read\/(\w+)$/, async (id) => {
     $('#chk').disabled = true;
     S.exams.push({ id: 'e' + Date.now(), at: Date.now(), title: 'Đọc hiểu ' + s.title, set: s.id, score: ok, total: list.length }); save();
   };
+});
+
+/* ---------------- Nghe ---------------- */
+on(/^\/audio$/, async (q) => {
+  const A = await load('audio');
+  const PK = 'n1.audiopos'; let pos = {}; try { pos = JSON.parse(localStorage.getItem(PK)) || {}; } catch { }
+  const fmt = s => `${s / 3600 >= 1 ? (s / 3600 | 0) + ':' : ''}${String((s % 3600) / 60 | 0).padStart(2, '0')}:${String(s % 60 | 0).padStart(2, '0')}`;
+  const all = A.flatMap(g => g.tracks.map(t => ({ ...t, g: g.id })));
+  let cur = all.find(t => t.f === (q.f || pos._last)) || all[0];
+  main.innerHTML = `<a class="crumb" href="#/learn">‹ Học</a><h1>Nghe</h1><p class="lead">Bấm một bài để phát. Ứng dụng nhớ chỗ bạn đang nghe ở từng bài và tự chuyển sang bài kế tiếp.</p>
+  <div class="panel player"><div class="jp" id="now" style="font-weight:700"></div>
+   <audio id="au" controls preload="metadata" style="width:100%;margin:10px 0"></audio>
+   <div class="row"><button class="btn sm" id="back">−10s</button><button class="btn sm" id="fwd">+10s</button><span class="spacer"></span><span class="small muted">Tốc độ</span><div class="seg" id="spd">${[0.75, 1, 1.25, 1.5].map(v => `<button data-v="${v}">${v}×</button>`).join('')}</div></div></div>
+  ${A.map(g => `<h2>${esc(g.title)}</h2><p class="small muted">${esc(g.desc)}</p><div class="list">${g.tracks.map(t => `<a class="item track" href="javascript:void 0" data-f="${t.f}"><div class="glyph" style="font-size:.9rem;font-family:var(--ui)">▶</div><div class="body"><b>${esc(t.t)}</b><div class="sub">${fmt(t.d)}${pos[t.f] ? ' · đang nghe ở ' + fmt(pos[t.f]) : ''}</div></div></a>`).join('')}</div>`).join('')}`;
+  const au = $('#au'); let rate = 1; try { rate = +localStorage.getItem('n1.rate') || 1; } catch { }
+  const setRate = v => { rate = v; au.playbackRate = v; $$('#spd button').forEach(b => b.classList.toggle('on', +b.dataset.v === v)); try { localStorage.setItem('n1.rate', v); } catch { } };
+  const savePos = () => { if (!cur) return; pos[cur.f] = au.currentTime > cur.d - 3 ? 0 : au.currentTime; pos._last = cur.f; try { localStorage.setItem(PK, JSON.stringify(pos)); } catch { } };
+  const open = (t, play) => {
+    cur = t; au.src = t.f; $('#now').textContent = A.find(g => g.id === t.g).title + ' — ' + t.t;
+    $$('.track').forEach(a => a.classList.toggle('on', a.dataset.f === t.f));
+    au.onloadedmetadata = () => { if (pos[t.f]) au.currentTime = pos[t.f]; au.playbackRate = rate; if (play) au.play().catch(() => { }); };
+  };
+  $$('.track').forEach(a => a.onclick = () => { savePos(); open(all.find(t => t.f === a.dataset.f), true); });
+  $$('#spd button').forEach(b => b.onclick = () => setRate(+b.dataset.v));
+  $('#back').onclick = () => au.currentTime = Math.max(0, au.currentTime - 10);
+  $('#fwd').onclick = () => au.currentTime += 10;
+  let last = 0; au.ontimeupdate = () => { if (Date.now() - last > 4000) { last = Date.now(); savePos(); } };
+  au.onended = () => { pos[cur.f] = 0; savePos(); const i = all.indexOf(cur); if (all[i + 1] && all[i + 1].g === cur.g) open(all[i + 1], true); };
+  au.onratechange = () => { if (au.playbackRate !== rate) setRate(au.playbackRate); };
+  setRate(rate); open(cur, false);
+  cleanup = () => { savePos(); au.pause(); };
 });
 
 /* ---------------- Đề thi thử tổng hợp ---------------- */
@@ -680,8 +713,18 @@ function jpParas(text) {
   return out.map(p => /^[（(][0-9０-９]+[)）]$|^[AB]$/.test(p) ? `<p class="nb">${ul(p)}</p>` : /^(（注|\(注|＊|※)/.test(p) ? `<p class="note">${ul(p)}</p>` : `<p>${ul(p)}</p>`).join('');
 }
 const SEC_GROUP = n => n <= 4 ? '文字・語彙' : n <= 7 ? '文法' : '読解';
+const scanTxt = () => { let v = null; try { v = localStorage.getItem('n1.scantxt'); } catch { } return v === null ? matchMedia('(max-width: 700px)').matches : v === '1'; };
+// Cắt vùng ảnh trang scan: img = [[trang, y0, y1, rộng, cao]] theo toạ độ ảnh gốc (margin-top % tính theo bề rộng)
+function cropHTML(img) {
+  return `<div class="crop-wrap" title="Chạm để phóng to / thu nhỏ">${img.map(([p, y0, y1, W, H, x0 = 0, x1 = W]) => { const cw = x1 - x0;
+    return `<div class="crop" style="aspect-ratio:${cw}/${y1 - y0};width:min(100%,${Math.round(cw / W * 960)}px);--zw:${Math.round(cw / W * 960)}px"><img loading="lazy" src="data/scan/p${String(p).padStart(3, '0')}.webp" style="width:${(W / cw * 100).toFixed(3)}%;margin-left:${(-x0 / cw * 100).toFixed(3)}%;margin-top:${(-y0 / cw * 100).toFixed(3)}%" alt="Đề gốc trang ${p}"></div>`; }).join('')}</div>`;
+}
+const numOpts = () => `<div class="opts nums">${[1, 2, 3, 4].map(j => `<button class="opt" data-a="${j}"><span class="n">${j}</span></button>`).join('')}</div>`;
 function testBlocks(sec, pfx) {
-  return sec.blocks.map(b => b.t === 'text' ? `<div class="passage">${jpParas(b.text)}</div>` : b.t === 'pre' ? `<pre class="passage pre">${esc(b.text)}</pre>` :
+  const txt = scanTxt();
+  return sec.blocks.map(b => b.img && !txt ? (b.t === 'text' ? `<div class="passage scan">${cropHTML(b.img)}</div>` : `<div class="q scan" data-n="${pfx}${b.n}">${cropHTML(b.img)}${numOpts()}</div>`) :
+    b.img && b.t === 'q' && b.o.length !== 4 ? `<div class="q scan" data-n="${pfx}${b.n}"><div class="qt">${b.n}．${b.q ? ul(b.q) : ''}</div>${cropHTML(b.img)}${numOpts()}</div>` :
+    b.t === 'text' ? `<div class="passage">${jpParas(b.text)}</div>` : b.t === 'pre' ? `<pre class="passage pre">${esc(b.text)}</pre>` :
     `<div class="q" data-n="${pfx}${b.n}"><div class="qt">${b.n}．${b.q ? ul(b.q) : ''}</div><div class="opts" style="${b.o.every(o => o.length < 12) ? 'grid-template-columns:repeat(auto-fit,minmax(140px,1fr))' : ''}">${b.o.map((o, j) => `<button class="opt" data-a="${j + 1}"><span class="n">${j + 1}</span><span>${ul(o)}</span></button>`).join('')}</div></div>`).join('');
 }
 on(/^\/tests$/, async () => {
@@ -700,6 +743,7 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
   let left = draft.left ?? LIM * 60, finished = false;
   main.innerHTML = `<div class="timer">${timed ? `<span class="clock" id="clk"></span><span class="muted small">còn lại</span>` : `<span class="muted small">Chế độ luyện tập — chọn đáp án để xem đúng/sai</span>`}<span class="spacer"></span><span class="small muted" id="cnt"></span>${timed ? '<button class="btn sm primary" id="sub">Nộp bài</button>' : ''}</div>
   <a class="crumb" href="#/tests">‹ Danh sách đề</a><h1>${esc(E.title)}</h1><p class="muted">${esc(E.set)}</p>
+  ${E.scan ? `<div class="row" style="margin-bottom:8px"><div class="seg" id="scanmode"><button data-m="0" class="${scanTxt() ? '' : 'on'}">Ảnh đề gốc</button><button data-m="1" class="${scanTxt() ? 'on' : ''}">Chữ (nhận dạng OCR)</button></div></div><p class="small muted">Đề scan: “Ảnh đề gốc” hiển thị đúng bản in; “Chữ” là văn bản nhận dạng tự động (có thể sai vài chữ, câu nào tách lỗi vẫn hiện ảnh gốc). Đáp án đã đối chiếu thủ công với bảng đáp án chính thức.</p>` : ''}
   ${E.sections.map(s => `<div class="sec-title">問題${s.no}　<span class="jp" style="font-weight:500">${esc(s.instr)}</span></div>${testBlocks(s, '')}`).join('')}
   <div id="result"></div>${timed ? '<div style="margin-top:20px"><button class="btn primary" id="sub2">Nộp bài</button></div>' : ''}`;
   const all = E.sections.flatMap(s => s.blocks.filter(b => b.t === 'q').map(b => ({ ...b, sec: s.no })));
@@ -710,11 +754,12 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
   $$('.opt', main).forEach(b => b.onclick = () => {
     const qe = b.closest('.q'); if (qe.classList.contains('graded')) return;
     $$('.opt', qe).forEach(x => x.classList.remove('sel')); b.classList.add('sel');
-    if (!timed) { gradeQs(main, [{ el: qe, answer: byN[qe.dataset.n].a }]); }
+    if (!timed) { gradeQs(main, [{ el: qe, answer: byN[qe.dataset.n].a, explain: byN[qe.dataset.n].note && esc(byN[qe.dataset.n].note) }]); }
     else saveDraft();
     counter();
   });
   counter();
+  $$('#scanmode button').forEach(b => b.onclick = () => { saveDraft(); try { localStorage.setItem('n1.scantxt', b.dataset.m); } catch { } cleanup && cleanup(); cleanup = null; route(); });
   if (timed) {
     const fmt = s => `${String(s / 60 | 0).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     $('#clk').textContent = fmt(left);
@@ -724,7 +769,7 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
       if (finished) return; finished = true; clearInterval(iv);
       const groups = {}, secs = {}; let score = 0;
       for (const b of all) {
-        const el = $(`.q[data-n="${b.n}"]`); const ok = gradeQs(main, [{ el, answer: b.a }]);
+        const el = $(`.q[data-n="${b.n}"]`); const ok = gradeQs(main, [{ el, answer: b.a, explain: b.note && esc(b.note) }]);
         const g = JL ? SEC_GROUP(b.sec) : '問題' + b.sec; groups[g] ||= [0, 0]; groups[g][0] += ok; groups[g][1]++;
         const k = '問題' + b.sec; secs[k] ||= [0, 0]; secs[k][0] += ok; secs[k][1]++; score += ok;
       }

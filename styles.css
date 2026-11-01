@@ -254,3 +254,19 @@ details.grp>summary::before{content:"▸";display:inline-block;margin-right:6px;
 details.grp[open]>summary::before{transform:rotate(90deg)}
 details.gset>summary{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 .subgrp{margin:14px 0 6px;font-size:.88rem;font-weight:600;color:var(--ink-3)}
+/* Đề scan: vùng cắt từ ảnh trang gốc */
+.crop-wrap{overflow-x:auto;cursor:zoom-in}
+.crop-wrap.zoom{cursor:zoom-out}
+.crop-wrap.zoom .crop{width:max(var(--zw),720px)!important}
+.crop{overflow:hidden;border-radius:var(--radius-s,6px)}
+.crop img{display:block;width:100%;height:auto;max-width:none}
+.passage.scan{padding:8px;max-width:836px}
+.passage.scan .crop+.crop{border-top:1px dashed var(--line);margin-top:4px}
+.q.scan{max-width:836px}
+.q.scan .crop{border:1px solid var(--line);padding:0}
+.opts.nums{grid-template-columns:repeat(4,minmax(0,1fr));max-width:420px}
+.opts.nums .opt{justify-content:center}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .crop img{filter:invert(.88) hue-rotate(180deg)}}
+:root[data-theme="dark"] .crop img{filter:invert(.88) hue-rotate(180deg)}
+.item.track.on{border-color:var(--indigo-2);box-shadow:inset 3px 0 0 var(--indigo-2)}
+.player{position:sticky;top:8px;z-index:5}
