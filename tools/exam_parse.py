@@ -14,7 +14,9 @@ for l in raw.split('\n'):
         continue
     if 'Khóa luyện đề' in l or 'Thaolejp' in l or 'thaolejp' in l or 'Khóa học online' in l:
         continue
-    l = re.sub(r'\s{6,}[\d ]{1,7}$', '', l.rstrip())
+    if not re.match(r'^\s*⟦?\s*(Đ\.A|Câu|Đáp án)', l):
+        l = re.sub(r'\s{6,}[\d ]{1,7}$', '', l.rstrip())
+    l = re.sub(r'(^\s*|\s{3,})⟦\s*\d{1,3}\s*⟧\s*$', '', l)
     if re.fullmatch(r'\s*[\d ]{1,7}\s*', l):
         l = ''
     lines.append(l)
@@ -24,9 +26,11 @@ exams = []
 cur = dict(title=SINGLE, lines=[]) if SINGLE else None
 if cur: exams.append(cur)
 for l in lines:
-    m = None if SINGLE else HEAD.match(l)
+    m = None if SINGLE else (re.match(r'^@@EXAM (.+)$', l) or HEAD.match(l))
     if m:
         title = re.sub(r'\s+', ' ', m.group(1).strip())
+        if l.startswith('@@EXAM'):
+            cur = dict(title=title, lines=[]); exams.append(cur); continue
         cur = dict(title=title.title().replace('Đề Thi Thử Số', 'Đề thi thử số').replace('Đề Test Đầu Vào', 'Đề test đầu vào'), lines=[])
         exams.append(cur)
         continue
@@ -35,6 +39,26 @@ for l in lines:
 
 OPT = re.compile(r'(?:^|\s)([１-４])[．.]?\s*(.+?)(?=\s+[１-４][．.]?\s*\S|\s*$)')
 OPT2 = re.compile(r'(?:^|\s)([1-4])[．.]?\s+(.+?)(?=\s+[1-4][．.]?\s+\S|\s*$)')
+
+
+MK = re.compile(r'(?:(?<=\s)|^)([１-４1-4])(?:[．.、]\s*|\s+)(?=\S)')
+MKS = re.compile(r'(?:(?<=\s)|^)([１-４1-4])(?:[．.、]\s*|\s{2,}|\s(?=[^\s0-9０-９年月日]))(?=\S)')
+def _split(t, it, start):
+    want = start; pos = []
+    for m in it:
+        if int(m.group(1).translate(FW)) == want and want <= 4:
+            pos.append((m.start(), m.end())); want += 1
+    if not pos or pos[0][0] != 0:
+        return []
+    return [t[b:(pos[i + 1][0] if i + 1 < len(pos) else len(t))].strip() for i, (a, b) in enumerate(pos)]
+
+
+def split_opts(t, start):
+    """Tách các phương án theo thứ tự start, start+1… (chấp nhận cả chữ số toàn góc/bán góc)."""
+    t = t.strip()
+    st = _split(t, MKS.finditer(t), start)
+    lo = _split(t, MK.finditer(t), start)
+    return st if len(st) >= len(lo) else lo
 
 
 def sq(s):
@@ -58,6 +82,8 @@ def parse_exam(ex):
             nums = [int(x) for x in re.findall(r'\d+', t)]
         elif (t.startswith('Đáp án') or t.startswith('Đ.A')) and nums:
             vals = [int(x) for x in re.findall(r'\d+', t.translate(FW))]
+            if nums != list(range(nums[0], nums[0] + len(nums))) or len(nums) != len(vals):
+                nums = list(range(nums[0], nums[0] + len(vals)))
             for n, v in zip(nums, vals):
                 ans[n] = v
             nums = None
@@ -73,6 +99,7 @@ def parse_exam(ex):
             if state == 'instr':
                 state = 'afterinstr'
             continue
+        t = re.sub(r'^\d{1,3}\s{3,}(?=[１-４][\s．.])', '', t)
         ms = re.match(r'^問題\s*([0-9０-９]+)\s*(.*)$', t)
         if ms:
             sec = dict(no=int(ms.group(1).translate(FW)), instr=sq(ms.group(2)), blocks=[])
@@ -85,26 +112,27 @@ def parse_exam(ex):
         if state == 'instr' and not re.search(r'[。]$', sec['instr']) and not re.match(r'^\d{1,2}\s*[．.]', t):
             sec['instr'] = sq(sec['instr'] + t)
             continue
+        if q is not None and not q['options'] and state == 'stem' and len(OPT.findall(t)) == 4 and len(split_opts(t, 1)) < 4:
+            q['options'] = [sq(v) for _, v in OPT.findall(t)]; state = 'opt'; continue
+        if q is not None and len(q['options']) < 4 and (q['options'] or state == 'stem'):
+            got = split_opts(t, len(q['options']) + 1)
+            if got:
+                q['options'] += [sq(x) for x in got]
+                state = 'opt'
+                continue
+        if q is not None and not q['options']:
+            o4 = OPT.findall(t)
+            if len(o4) == 4:
+                q['options'] = [sq(v) for _, v in o4]; state = 'opt'; continue
+        t = re.sub(r'^⟦\s*([0-9０-９]{1,2})\s*⟧\s*⟦?\s*([．.])\s*⟧?', r'\1\2', t)
+        t = re.sub(r'^⟦\s*([0-9０-９]{1,2})\s*([．.])', r'\1\2⟦', t)
         tq = re.sub(r'^[０-９]+', lambda m: m.group(0).translate(FW), t)
-        mq = re.match(r'^(\d{1,2})(?:\s*[．.]|\s{2,})\s*(.*)$', tq)
-        if mq and (int(mq.group(1)) == expect or ((q is None or len(q['options']) == 4) and 0 < abs(int(mq.group(1)) - expect) <= 8 and state != 'text')):
+        mq = re.match(r'^(\d{1,2})(?:\s*[．.。]|\s{2,})\s*(.*)$', tq)
+        if mq and (int(mq.group(1)) == expect or (not mq.group(2).strip() and (q is None or len(q['options']) == 4)) or ((q is None or len(q['options']) == 4) and 0 < abs(int(mq.group(1)) - expect) <= 8 and state != 'text')):
             q = dict(n=expect, q=sq(mq.group(2)), options=[])
             sec['blocks'].append(dict(t='q', **{'q': q}))
             expect += 1
             state = 'stem'
-            continue
-        opts = OPT.findall(t)
-        if not opts and re.match(r'^[1-4][．.]?\s+\S', t):
-            opts = [(k.translate(str.maketrans('1234', '１２３４')), v) for k, v in OPT2.findall(t)]
-        if q is not None and len(opts) == 4 and not q['options']:
-            q['options'] = [sq(v) for _, v in opts]
-            state = 'opt'
-            continue
-        if q is not None and opts and int(opts[0][0].translate(FW)) == len(q['options']) + 1 and len(q['options']) < 4:
-            for k, v in opts:
-                if int(k.translate(FW)) == len(q['options']) + 1:
-                    q['options'].append(sq(v))
-            state = 'opt'
             continue
         if state == 'stem' and q is not None and not q['options']:
             q['q'] = sq(q['q'] + t)

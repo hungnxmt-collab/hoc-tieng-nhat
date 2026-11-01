@@ -248,3 +248,9 @@ table.kt{border-collapse:collapse;width:100%;font-family:var(--jp);font-size:.95
 table.kt th{text-align:left;font-weight:700;background:var(--indigo-soft);color:var(--indigo);padding:8px 10px}
 table.kt td{padding:8px 10px;border-top:1px solid var(--line);vertical-align:top}
 .sec-title .jp{font-size:.95rem}
+details.grp>summary{cursor:pointer;list-style:none}
+details.grp>summary::-webkit-details-marker{display:none}
+details.grp>summary::before{content:"▸";display:inline-block;margin-right:6px;transition:transform .15s;color:var(--ink-3)}
+details.grp[open]>summary::before{transform:rotate(90deg)}
+details.gset>summary{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.subgrp{margin:14px 0 6px;font-size:.88rem;font-weight:600;color:var(--ink-3)}

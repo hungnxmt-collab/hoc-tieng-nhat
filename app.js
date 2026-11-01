@@ -227,7 +227,7 @@ on(/^\/today$/, async () => {
   <h2>Luyện nhanh</h2>
   <div class="grid-hub">
     <a class="hub" href="#/mock"><span class="glyph">試</span><div><h3>Đề thi thử N1</h3><p>Từ vựng, kanji, ngữ pháp và đọc hiểu, có tính giờ</p></div></a>
-    <a class="hub" href="#/read"><span class="glyph">読</span><div><h3>Luyện đọc hiểu</h3><p>56 bài: 短文, 中文, 長文, 比較, 検索</p></div></a>
+    <a class="hub" href="#/read"><span class="glyph">読</span><div><h3>Luyện đọc hiểu</h3><p>156 bài: 短文, 中文, 長文, 比較, 検索 + 100 bài Thaolejp</p></div></a>
     <a class="hub" href="#/kana"><span class="glyph">あ</span><div><h3>Hiragana / Katakana</h3><p>Trắc nghiệm nhận diện kana</p></div></a>
   </div>
   ${!GH.ok() ? `<div class="status info" style="margin-top:20px">Tiến độ đang chỉ lưu trên thiết bị này. <a href="#/settings">Kết nối GitHub</a> để lưu lên GitHub và dùng chung giữa máy tính và điện thoại.</div>` : ''}`;
@@ -257,11 +257,11 @@ on(/^\/vocab$/, async (q) => {
   main.innerHTML = `<a class="crumb" href="#/learn">‹ Học</a><h1>Từ vựng</h1>
   <input class="search" id="vs" type="search" placeholder="Tìm từ, cách đọc hoặc nghĩa tiếng Việt…" aria-label="Tìm từ vựng">
   <div id="vres"></div>
-  <div id="vlist">${groups.map(g => `<div class="groupname">${esc(g)}</div><div class="list">${ds.filter(d => d.group === g).map(d => {
+  <div id="vlist">${groups.map((g, gi) => `<details class="grp" ${gi === 0 || ds.some(d => d.group === g && S.active['v:' + d.id]) ? 'open' : ''}><summary class="groupname">${esc(g)} <span class="muted small">· ${ds.filter(d => d.group === g).length} bài · ${ds.filter(d => d.group === g).reduce((a, d) => a + d.items.length, 0)} từ</span></summary><div class="list">${ds.filter(d => d.group === g).map(d => {
     const p = deckProgress('v:', d.items.map(i => i.id));
     return `<a class="item" href="#/vocab/${d.id}"><div class="body"><div class="row"><b>${esc(d.name)}</b>${S.active['v:' + d.id] ? '<span class="tag on">Đang học</span>' : ''}</div>
     <div class="sub">${d.items.length} từ · đã học ${p.l} · thuộc ${p.m}</div><div class="bar"><i style="width:${100 * p.l / Math.max(1, p.n)}%"></i></div></div></a>`;
-  }).join('')}</div>`).join('')}
+  }).join('')}</div></details>`).join('')}
   <div class="groupname">Của tôi</div><a class="item" href="#/addword"><div class="glyph">＋</div><div class="body"><b>Thêm từ của bạn</b><div class="sub">Từ bạn tự thêm cũng được lưu lên GitHub</div></div></a></div>`;
   const all = await allVocab();
   const inp = $('#vs');
@@ -324,23 +324,26 @@ on(/^\/kanji\/(\d+)$/, async (c) => {
 });
 
 /* ---------------- Ngữ pháp ---------------- */
-const GSETS = { book: 'Ngữ pháp N1 (giáo trình, 22 chương)', freq: 'Ngữ pháp hay xuất hiện trong đề thi' };
+const GSETS = { book: 'Ngữ pháp N1 (giáo trình, 22 chương)', freq: 'Ngữ pháp hay xuất hiện trong đề thi', th: 'Tổng hợp ngữ pháp N1 (Thaolejp)', cn: 'Cẩm nang ngữ pháp N1 (Thaolejp)' };
 on(/^\/grammar$/, async () => {
   const G = await load('grammar');
   main.innerHTML = `<a class="crumb" href="#/learn">‹ Học</a><h1>Ngữ pháp</h1>
   <input class="search" id="gs" type="search" placeholder="Tìm mẫu ngữ pháp hoặc nghĩa…" aria-label="Tìm ngữ pháp">
   ${Object.entries(GSETS).map(([s, name]) => { const gs = G.filter(g => g.set === s); const act = !!S.active['g:' + s]; const p = deckProgress('g:', gs.map(g => g.id));
-    return `<div class="row" style="margin:24px 0 8px"><b>${name}</b><span class="muted small">${gs.length} mẫu · đã học ${p.l}</span><span class="spacer"></span>
-    <button class="btn sm ${act ? '' : 'primary'}" data-tog="${s}">${act ? 'Ngừng học' : 'Học phần này'}</button><a class="btn sm" href="#/review?deck=g:${s}&mode=browse">Lật thẻ</a></div>
-    <div class="list">${gs.map(g => `<a class="item gi" href="#/grammar/${g.id}" data-s="${esc((g.title + ' ' + g.mean).toLowerCase())}"><div class="body"><b class="jp">${esc(g.title)}</b>${S.srs['g:' + g.id] ? ` <span class="tag ${isMastered(S.srs['g:' + g.id]) ? 'on' : ''}">${isMastered(S.srs['g:' + g.id]) ? 'Đã thuộc' : 'Đang học'}</span>` : ''}<div class="sub">${esc(g.mean.split(' • ').slice(0, 2).join(' • '))}</div></div></a>`).join('')}</div>`; }).join('')}`;
+    const grps = [...new Set(gs.map(g => g.grp || ''))];
+    const itemsHTML = grps.map(gr => `${gr ? `<div class="subgrp">${esc(gr)}</div>` : ''}<div class="list">${gs.filter(g => (g.grp || '') === gr).map(g => `<a class="item gi" href="#/grammar/${g.id}" data-s="${esc((g.title + ' ' + g.mean).toLowerCase())}"><div class="body"><b class="jp">${esc(g.title)}</b>${S.srs['g:' + g.id] ? ` <span class="tag ${isMastered(S.srs['g:' + g.id]) ? 'on' : ''}">${isMastered(S.srs['g:' + g.id]) ? 'Đã thuộc' : 'Đang học'}</span>` : ''}<div class="sub">${esc(g.mean.split(' • ').slice(0, 2).join(' • '))}</div></div></a>`).join('')}</div>`).join('');
+    return `<details class="grp gset" ${s === 'book' || act ? 'open' : ''}><summary class="row" style="margin:20px 0 8px"><b>${name}</b><span class="muted small">${gs.length} mẫu · đã học ${p.l}</span><span class="spacer"></span>
+    <button class="btn sm ${act ? '' : 'primary'}" data-tog="${s}">${act ? 'Ngừng học' : 'Học phần này'}</button><a class="btn sm" href="#/review?deck=g:${s}&mode=browse">Lật thẻ</a></summary>
+    ${itemsHTML}</details>`; }).join('')}`;
   $$('[data-tog]').forEach(b => b.onclick = () => { const k = 'g:' + b.dataset.tog; if (S.active[k]) delete S.active[k]; else S.active[k] = true; save(); route(); });
-  $('#gs').oninput = e => { const t = e.target.value.trim().toLowerCase(); $$('.gi').forEach(a => a.classList.toggle('hidden', !!t && !a.dataset.s.includes(t))); };
+  $$('[data-tog]').forEach(b => b.addEventListener('click', e => e.preventDefault(), true));
+  $('#gs').oninput = e => { const t = e.target.value.trim().toLowerCase(); if (t) $$('details.gset').forEach(d => d.open = true); $$('.gi').forEach(a => a.classList.toggle('hidden', !!t && !a.dataset.s.includes(t))); };
 });
 function grammarBody(g) {
   return `${g.form.length ? `<div class="form-box">${g.form.map(esc).join('<br>')}</div>` : ''}
   <p style="font-size:1.1rem;font-weight:500">${esc(g.mean).replace(/ • /g, '<br>')}</p>
   ${g.use.length ? `<h3>Cách dùng</h3><ul>${g.use.map(u => `<li>${esc(u)}</li>`).join('')}</ul>` : ''}
-  ${g.ex.length ? `<h3>Ví dụ</h3><ol class="gram-ex">${g.ex.map(e => `<li>${esc(e)} ${sayBtn(e).replace('icon-btn', 'icon-btn inline')}</li>`).join('')}</ol>` : ''}
+  ${g.ex.length ? `<h3>Ví dụ</h3><ol class="gram-ex">${g.ex.map((e, k) => `<li>${esc(e)} ${sayBtn(e).replace('icon-btn', 'icon-btn inline')}${g.exvi?.[k] ? `<div class="exvi">${esc(g.exvi[k])}</div>` : ''}</li>`).join('')}</ol>` : ''}
   ${(g.notes || []).map(n => `<div class="lesson-note"><h3>${esc(n.src)}</h3>
     <p><b>意味:</b> ${esc(n.mean)}</p>${n.form ? `<div class="form-box">${esc(n.form)}</div>` : ''}
     <p><b>注意:</b> ${esc(n.note)}</p>
@@ -349,7 +352,7 @@ function grammarBody(g) {
 on(/^\/grammar\/([\w]+)$/, async (id) => {
   const G = await load('grammar'); const i = G.findIndex(g => g.id === id); const g = G[i]; if (!g) throw new Error('Không tìm thấy mẫu ngữ pháp');
   const prev = G[i - 1]?.set === g.set ? G[i - 1] : null, next = G[i + 1]?.set === g.set ? G[i + 1] : null;
-  main.innerHTML = `<a class="crumb" href="#/grammar">‹ Ngữ pháp</a><h1 class="jp">${esc(g.title)}</h1><p class="muted">${GSETS[g.set]}${g.ch ? ' · Chương ' + g.ch : ''}</p>
+  main.innerHTML = `<a class="crumb" href="#/grammar">‹ Ngữ pháp</a><h1 class="jp">${esc(g.title)}</h1><p class="muted">${GSETS[g.set]}${g.ch ? ' · Chương ' + g.ch : ''}${g.grp ? ' · ' + esc(g.grp) : ''}</p>
   <div class="panel">${grammarBody(g)}</div>
   <div class="row" style="margin-top:16px">${prev ? `<a class="btn" href="#/grammar/${prev.id}">‹ <span class="jp">${esc(prev.title)}</span></a>` : ''}<span class="spacer"></span>${next ? `<a class="btn" href="#/grammar/${next.id}"><span class="jp">${esc(next.title)}</span> ›</a>` : ''}</div>`;
 });
@@ -546,7 +549,7 @@ on(/^\/exam$/, async () => {
   const ex = S.exams.slice(-5).reverse();
   main.innerHTML = `<h1>Thi thử</h1><p class="lead">Luyện theo đề tổng hợp có tính giờ, hoặc từng bài đọc hiểu.</p>
   <div class="grid-hub">
-    <a class="hub" href="#/tests"><span class="glyph">本</span><div><h3>Đề thi đầy đủ</h3><p>38 đề N1 (言語知識・読解) có đáp án, thi 110 phút hoặc luyện tập</p></div></a>
+    <a class="hub" href="#/tests"><span class="glyph">本</span><div><h3>Đề thi & bài tập</h3><p>38 đề N1 đầy đủ + 87 bài test từ vựng, ngữ pháp, đọc hiểu — đều có đáp án</p></div></a>
     <a class="hub" href="#/drill"><span class="glyph">型</span><div><h3>Luyện theo dạng câu</h3><p>漢字読み, 文脈規定, ★, đọc hiểu… gom từ tất cả các đề</p></div></a>
     <a class="hub" href="#/mock"><span class="glyph">試</span><div><h3>Đề tự sinh ngẫu nhiên</h3><p>Trộn từ vựng, kanji, ngữ pháp + đọc hiểu, chấm theo phần</p></div></a>
     <a class="hub" href="#/read"><span class="glyph">読</span><div><h3>Luyện đọc hiểu</h3><p>${R.reduce((a, g) => a + g.sets.length, 0)} bài có đáp án</p></div></a>
@@ -685,16 +688,16 @@ on(/^\/tests$/, async () => {
   const I = await load('exams/index');
   const best = {}; for (const e of S.exams) if (e.test) best[e.test] = Math.max(best[e.test] ?? 0, e.score / e.total);
   const sets = [...new Set(I.map(x => x.set))];
-  main.innerHTML = `<a class="crumb" href="#/exam">‹ Thi thử</a><h1>Đề thi đầy đủ</h1><p class="lead">Phần 言語知識（文字・語彙・文法）・読解, thời gian thi thật 110 phút. Chọn “Luyện tập” để xem đáp án ngay sau mỗi câu.</p>
-  ${sets.map(st => `<div class="groupname">${esc(st)}</div><div class="list">${I.filter(x => x.set === st).map(x => `<div class="item"><div class="glyph" style="font-size:.95rem;font-family:var(--ui)">${best[x.id] !== undefined ? Math.round(best[x.id] * 100) + '%' : '–'}</div>
+  main.innerHTML = `<a class="crumb" href="#/exam">‹ Thi thử</a><h1>Đề thi & bài tập</h1><p class="lead">${I.length} đề/bài, ${I.reduce((a, x) => a + x.nq, 0)} câu có đáp án. Đề JLPT đầy đủ tính giờ 110 phút; bài tập tính giờ theo số câu. Chọn “Luyện tập” để xem đáp án ngay sau mỗi câu.</p>
+  ${sets.map((st, si) => `<details class="grp" ${si === 0 ? 'open' : ''}><summary class="groupname">${esc(st)} <span class="muted small">· ${I.filter(x => x.set === st).length} bài · ${I.filter(x => x.set === st).reduce((a, x) => a + x.nq, 0)} câu</span></summary><div class="list">${I.filter(x => x.set === st).map(x => `<div class="item"><div class="glyph" style="font-size:.95rem;font-family:var(--ui)">${best[x.id] !== undefined ? Math.round(best[x.id] * 100) + '%' : '–'}</div>
     <div class="body"><b>${esc(x.title)}</b><div class="sub">${x.nq} câu · ${x.secs.length} phần</div></div>
-    <a class="btn sm" href="#/test/${x.id}?mode=practice">Luyện tập</a><a class="btn sm primary" href="#/test/${x.id}?mode=timed">Thi</a></div>`).join('')}</div>`).join('')}`;
+    <a class="btn sm" href="#/test/${x.id}?mode=practice">Luyện tập</a><a class="btn sm primary" href="#/test/${x.id}?mode=timed">Thi ${x.min || 110}′</a></div>`).join('')}</div></details>`).join('')}`;
 });
 on(/^\/test\/(\w+)$/, async (id, q) => {
   const I = await load('exams/index'); const meta = I.find(x => x.id === id); if (!meta) throw new Error('Không tìm thấy đề');
-  const E = await load('exams/' + id); const timed = q.mode !== 'practice';
+  const E = await load('exams/' + id); const timed = q.mode !== 'practice'; const LIM = meta.min || 110, JL = meta.fmt !== 'practice';
   const DK = 'n1.draft.' + id; let draft = {}; try { draft = JSON.parse(localStorage.getItem(DK)) || {}; } catch { }
-  let left = draft.left ?? 110 * 60, finished = false;
+  let left = draft.left ?? LIM * 60, finished = false;
   main.innerHTML = `<div class="timer">${timed ? `<span class="clock" id="clk"></span><span class="muted small">còn lại</span>` : `<span class="muted small">Chế độ luyện tập — chọn đáp án để xem đúng/sai</span>`}<span class="spacer"></span><span class="small muted" id="cnt"></span>${timed ? '<button class="btn sm primary" id="sub">Nộp bài</button>' : ''}</div>
   <a class="crumb" href="#/tests">‹ Danh sách đề</a><h1>${esc(E.title)}</h1><p class="muted">${esc(E.set)}</p>
   ${E.sections.map(s => `<div class="sec-title">問題${s.no}　<span class="jp" style="font-weight:500">${esc(s.instr)}</span></div>${testBlocks(s, '')}`).join('')}
@@ -722,14 +725,14 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
       const groups = {}, secs = {}; let score = 0;
       for (const b of all) {
         const el = $(`.q[data-n="${b.n}"]`); const ok = gradeQs(main, [{ el, answer: b.a }]);
-        const g = SEC_GROUP(b.sec); groups[g] ||= [0, 0]; groups[g][0] += ok; groups[g][1]++;
+        const g = JL ? SEC_GROUP(b.sec) : '問題' + b.sec; groups[g] ||= [0, 0]; groups[g][0] += ok; groups[g][1]++;
         const k = '問題' + b.sec; secs[k] ||= [0, 0]; secs[k][0] += ok; secs[k][1]++; score += ok;
       }
-      const used = 110 * 60 - Math.max(0, left), pct = Math.round(100 * score / all.length);
+      const used = LIM * 60 - Math.max(0, left), pct = Math.round(100 * score / all.length);
       S.exams.push({ id: 'e' + Date.now(), at: Date.now(), title: E.title, test: id, score, total: all.length, secs: groups, time: used }); save(); sync();
       try { localStorage.removeItem(DK); } catch { }
       $('#result').innerHTML = `<h2>Kết quả</h2><div class="score"><div><b class="${pct >= 60 ? 'pass' : 'fail'}">${pct}%</b>${score}/${all.length} câu · ${fmt(used)}</div>${Object.entries(groups).map(([k, v]) => `<div><b>${v[0]}/${v[1]}</b><span class="jp">${k}</span></div>`).join('')}</div>
-      <details class="box"><summary>Điểm từng 問題</summary><div class="score">${Object.entries(secs).map(([k, v]) => `<div><b>${v[0]}/${v[1]}</b><span class="jp">${k}</span></div>`).join('')}</div></details>
+      <details class="box ${JL ? '' : 'hidden'}"><summary>Điểm từng 問題</summary><div class="score">${Object.entries(secs).map(([k, v]) => `<div><b>${v[0]}/${v[1]}</b><span class="jp">${k}</span></div>`).join('')}</div></details>
       <p class="muted small">Đáp án đúng tô xanh, câu chọn sai tô đỏ. Cuộn lên để xem lại.</p><div class="row"><a class="btn primary" href="#/tests">Chọn đề khác</a><a class="btn" href="#/stats">Xem tiến độ</a></div>`;
       $$('#sub,#sub2').forEach(b => b.disabled = true); $('#result').scrollIntoView({ behavior: 'smooth' });
     };
@@ -738,7 +741,7 @@ on(/^\/test\/(\w+)$/, async (id, q) => {
 });
 const DRILL = { 1: '漢字読み · Cách đọc kanji', 2: '文脈規定 · Điền từ theo ngữ cảnh', 3: '言い換え類義 · Từ đồng nghĩa', 4: '用法 · Cách dùng từ', 5: '文法形式の判断 · Chọn ngữ pháp', 6: '文の組み立て · Sắp xếp câu (★)', 7: '文章の文法 · Ngữ pháp trong đoạn văn', 8: '内容理解（短文）', 9: '内容理解（中文）', 10: '内容理解（長文）', 11: '統合理解 · Đọc so sánh A/B', 12: '主張理解（長文）', 13: '情報検索 · Tìm thông tin' };
 on(/^\/drill$/, async (q) => {
-  const I = await load('exams/index');
+  const I = (await load('exams/index')).filter(x => x.fmt !== 'practice');
   if (!q.type) {
     const cnt = {}; for (const x of I) for (const [n, c] of x.secs) cnt[n] = (cnt[n] || 0) + c;
     main.innerHTML = `<a class="crumb" href="#/exam">‹ Thi thử</a><h1>Luyện theo dạng câu</h1><p class="lead">Câu hỏi gom từ ${I.length} đề. Dạng 1–6: 10 câu ngẫu nhiên mỗi lượt; dạng 7–13: một bài đọc hoàn chỉnh.</p>
@@ -794,6 +797,7 @@ on(/^\/keigo$/, async (q) => {
   ${K.verbs.map(v => `<tr><td><b>${esc(v.v)}</b></td><td>${esc(v.son)}</td><td>${esc(v.ken)}</td><td>${esc(v.tei)}</td></tr>`).join('')}</tbody></table></div>
   <h2>Công thức</h2><div class="panel jp">${K.rules.map(r => `<p>${r.map(esc).join('<br>').replace(/・/g, '<br>・').replace(/^<br>/, '')}</p>`).join('')}</div>
   <h2>Lỗi kính ngữ hay gặp</h2><div class="table-wrap"><table class="kt"><thead><tr><th>✗ Sai</th><th>✓ Đúng</th></tr></thead><tbody>${K.mistakes.map(m => `<tr><td>${esc(m.bad)}</td><td>${esc(m.good)}</td></tr>`).join('')}</tbody></table></div>
+  ${K.phrases?.length ? `<h2>Câu mẫu kính ngữ (bài nghe ôn tập)</h2>${[...new Set(K.phrases.map(p => p.sec))].map(sec => `<details class="box"><summary>${esc(sec)}</summary>${K.phrases.filter(p => p.sec === sec).map(p => `<h3 class="jp" style="margin-top:12px">${esc(p.title)}</h3><ul class="gram-ex">${p.ex.map(e => `<li>${esc(e)} ${sayBtn(e).replace('icon-btn', 'icon-btn inline')}</li>`).join('')}</ul>`).join('')}</details>`).join('')}` : ''}
   <h2>Từ thường → cách nói trang trọng</h2><div class="table-wrap"><table class="kt"><thead><tr><th>Thường ngày</th><th>Công việc</th></tr></thead><tbody>${K.formal.map(m => `<tr><td>${esc(m.plain)}</td><td>${esc(m.formal)}</td></tr>`).join('')}</tbody></table></div>`;
 });
 
