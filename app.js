@@ -335,7 +335,11 @@ function grammarBody(g) {
   return `${g.form.length ? `<div class="form-box">${g.form.map(esc).join('<br>')}</div>` : ''}
   <p style="font-size:1.1rem;font-weight:500">${esc(g.mean).replace(/ • /g, '<br>')}</p>
   ${g.use.length ? `<h3>Cách dùng</h3><ul>${g.use.map(u => `<li>${esc(u)}</li>`).join('')}</ul>` : ''}
-  ${g.ex.length ? `<h3>Ví dụ</h3><ol class="gram-ex">${g.ex.map(e => `<li>${esc(e)} ${sayBtn(e).replace('icon-btn', 'icon-btn inline')}</li>`).join('')}</ol>` : ''}`;
+  ${g.ex.length ? `<h3>Ví dụ</h3><ol class="gram-ex">${g.ex.map(e => `<li>${esc(e)} ${sayBtn(e).replace('icon-btn', 'icon-btn inline')}</li>`).join('')}</ol>` : ''}
+  ${(g.notes || []).map(n => `<div class="lesson-note"><h3>${esc(n.src)}</h3>
+    <p><b>意味:</b> ${esc(n.mean)}</p>${n.form ? `<div class="form-box">${esc(n.form)}</div>` : ''}
+    <p><b>注意:</b> ${esc(n.note)}</p>
+    ${n.img?.length ? `<details><summary>Xem slide (${n.img.length})</summary><div class="pages">${n.img.map(u => `<img loading="lazy" src="${u}" alt="Slide bài giảng">`).join('')}</div></details>` : ''}</div>`).join('')}`;
 }
 on(/^\/grammar\/([\w]+)$/, async (id) => {
   const G = await load('grammar'); const i = G.findIndex(g => g.id === id); const g = G[i]; if (!g) throw new Error('Không tìm thấy mẫu ngữ pháp');
@@ -524,7 +528,7 @@ on(/^\/read\/(\w+)$/, async (id) => {
   <div class="row" style="margin-top:20px"><button class="btn primary" id="chk">Chấm điểm</button><span id="res"></span><span class="spacer"></span>${next ? `<a class="btn" href="#/read/${next.id}">Bài tiếp ›</a>` : ''}</div>`;
   bindOpts(main);
   $('#chk').onclick = () => {
-    const list = $$('#qs .q').map((el, i) => ({ el, answer: s.questions[i].answer }));
+    const list = $$('#qs .q').map((el, i) => ({ el, answer: s.questions[i].answer, explain: s.questions[i].explain && esc(s.questions[i].explain) }));
     const ok = gradeQs(main, list);
     $('#res').innerHTML = `<b class="${ok === list.length ? 'pass' : ''}">Đúng ${ok}/${list.length}</b>`;
     $('#chk').disabled = true;

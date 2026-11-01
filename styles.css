@@ -221,3 +221,7 @@ details.box summary{cursor:pointer;font-weight:600}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 .icon-btn.inline{display:inline-grid;vertical-align:middle;width:28px;height:28px}
 .icon-btn.inline svg{width:16px;height:16px}
+.lesson-note{margin-top:22px;padding-top:14px;border-top:1px dashed var(--line);text-align:left}
+.lesson-note p{margin:6px 0}
+.lesson-note summary{cursor:pointer;color:var(--indigo-2);font-weight:500;margin:6px 0}
+.lesson-note .pages img{margin-top:8px}
