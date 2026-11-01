@@ -2,6 +2,11 @@
 
 Web app chạy trên máy tính và điện thoại (cài được lên màn hình chính, dùng được khi offline).
 
+## Cách sắp xếp
+- **Học** theo 5 kỹ năng đúng cấu trúc đề JLPT: Kanji (問題1) · Từ vựng (問題2–4) · Ngữ pháp (問題5–7) · Đọc hiểu (問題8–13) · Nghe hiểu (聴解 問題1–5). Mỗi kỹ năng 4 bước: ① Học tài liệu (xếp theo thứ tự nên học) → ② Ôn bằng thẻ / nghe → ③ Luyện dạng đề lấy từ đề thật → ④ Bài tập thêm.
+- **Thi thử**: đề thật theo từng kỳ (Đọc 110′ + Nghe 55′ trên cùng một hàng), đề thi thử, đề tự sinh.
+- **Tiến độ**: thống kê theo từng kỹ năng.
+
 ## Tính năng
 - **Ôn tập thẻ lặp lại ngắt quãng (SRS)**: từ vựng, kanji, ngữ pháp — tự tính ngày ôn tiếp theo.
 - **Từ vựng** (hơn 8.000 thẻ): Chinh phục từ vựng N1 (2.218 từ / 111 bài, có dịch câu ví dụ), 8 chuyên đề Thaolejp (phó từ, từ nối, cụm từ thay thế trong đề, động từ ghép, kanji đọc đặc biệt, 130 kanji khó, tiền tố, hậu tố, kanji dễ nhầm), 1.157 từ N1 FULL 10.2024 (Dũng Mori, 46 mục, câu ví dụ có dịch), 1.169 từ N1 tổng hợp (24 bài), 714 từ N1 Trainingbook (theo ngày), từ vựng tiếp khách nhà hàng, và từ bạn tự thêm.

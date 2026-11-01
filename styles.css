@@ -297,3 +297,26 @@ details.gset>summary{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 .crop-wrap.book-page.zoom img{max-width:none;width:1100px}
 main:focus,#main:focus{outline:none}
 .tag.warn{background:#fdecc8;color:#7a4b00}
+/* Học theo kỹ năng */
+.part-title{display:flex;align-items:baseline;gap:8px;margin:26px 0 10px;font-weight:700}
+.part-title>span:first-child{font-family:var(--jp);background:var(--indigo);color:#fff;border-radius:6px;padding:2px 8px;font-size:.85rem}
+.skills{display:grid;gap:10px}
+.skill{display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);color:inherit;text-decoration:none}
+.skill:hover{border-color:var(--indigo-2)}
+.skill .glyph,.quick .glyph,.sk .glyph{font-family:var(--jp);font-size:1.6rem;width:52px;height:52px;display:grid;place-items:center;border-radius:12px;background:var(--surface-2);flex:none}
+.skill h3{margin:0;font-size:1.1rem}.skill p{margin:2px 0 0;color:var(--ink-2);font-size:.9rem}.skill .body{flex:1;min-width:0}
+.chev{color:var(--ink-3);font-size:1.4rem;margin-left:auto}
+.skilltabs{display:flex;gap:6px;overflow-x:auto;margin:6px 0 4px;padding-bottom:4px;scrollbar-width:none}
+.skilltabs a{flex:none;padding:6px 12px;border-radius:999px;border:1px solid var(--line);color:inherit;text-decoration:none;font-size:.9rem;background:var(--surface)}
+.skilltabs a.on{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.step{margin:22px 0}.step-h{display:flex;gap:12px;align-items:flex-start;margin-bottom:8px}
+.step-h h2{margin:0;font-size:1.15rem}.step-h p{margin:2px 0 0}
+.step-n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--shu,#c0392b);color:#fff;display:grid;place-items:center;font-weight:700}
+.quick{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+.quick a{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);color:inherit;text-decoration:none}
+.skillstats{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.sk{display:flex;gap:12px;align-items:center;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);color:inherit;text-decoration:none}.sk>div{flex:1}
+.exrow{flex-wrap:wrap}.exbtns{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.exbtns>div{display:flex;gap:6px;align-items:center}.exbtns .tag{margin-left:4px}
+@media (max-width:600px){.exbtns{width:100%;align-items:stretch}.exbtns>div{justify-content:flex-end}}
+@media (max-width:600px){.part-title{flex-wrap:wrap}.part-title .muted{flex-basis:100%}}
