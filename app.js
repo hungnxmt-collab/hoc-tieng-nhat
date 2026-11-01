@@ -1115,4 +1115,10 @@ on(/^\/settings$/, async () => {
 setPill();
 route();
 if (GH.ok()) sync();
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(r => { r.update(); setInterval(() => r.update(), 30 * 60 * 1000); });
+  // có phiên bản mới → tự tải lại một lần
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded) { reloaded = true; location.reload(); } });
+}
