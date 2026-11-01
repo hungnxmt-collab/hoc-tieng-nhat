@@ -227,6 +227,7 @@ def pos_icon(crop):
     if len(ys) < 200: return ''
     y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
     box = crop[y0 + 4:y1 - 3, x0 + 4:x1 - 3]
+    if box.size == 0 or min(box.shape) < 5: return ''
     ch = np.where(box > 185, 0, 255).astype(np.uint8)
     ch = cv2.copyMakeBorder(cv2.resize(ch, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC), 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=255)
     outs = []

@@ -25,11 +25,15 @@ for e in items:
     w = core(e['w']); ok = (w in JM['k2r'] and (not e['r'] or e['r'] in JM['k2r'][w])) or (w in JM['kana'])
     stem = re.sub(r'[ぁ-ん]{1,2}$', '', w) if re.search(r'[一-龥]', w) else w
     inex = bool(stem) and stem in e['ex']
-    chk = not ok or not e['r'] or not vi or not e['ex'] or not exvi or not inex
+    hl = re.sub(r'^[、。をがはにでとものへ]+', '', e.get('hl') or '')
+    hlk = re.sub(r'[ぁ-ん、。]+', '', hl)
+    hlok = not hl or (stem and (stem in hl or hl in w) and not (len(stem) == 1 and len(hlk) > 1 and hlk != stem))
+    chk = not ok or not e['r'] or not vi or not e['ex'] or not exvi or not inex or not hlok or bool(re.match(r'^[っゃゅょー]', w))
     it = dict(id=f'h3k{e["n"]}', w=e['w'], r=e['r'], hv='', m=vi + (f' ({POS[e["pos"]]})' if e.get('pos') in POS else ''),
               ex=[e['ex']] if e['ex'] else [], exvi=[exvi] if exvi else [])
-    rel = [x for x in e.get('plus', []) if x.get('w') and x.get('vi')]
-    if rel: it['rel'] = [f"{x['w']}: {vclean(x['vi'])}" for x in rel]
+    rel = [x for x in e.get('plus', []) if re.fullmatch(r'[一-龥ぁ-んァ-ンー〈〉]{2,}', x.get('w') or '') and (re.search(r'[一-龥]', x['w']) or len(x['w']) >= 3)]
+    rel = [f"{x['w']}: {v}" for x in rel for v in [vclean(x['vi'])] if len(v) >= 3 and not re.search(r'\d\)', v)]
+    if rel: it['rel'] = rel
     if chk:
         flagged += 1
         png = f'/home/claude/raw/haji/png_p{e["page"]:03d}.png'

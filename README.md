@@ -12,7 +12,11 @@ Web app chạy trên máy tính và điện thoại (cài được lên màn hì
 - **Đọc hiểu**: 156 bài (gồm 100 bài đọc hiểu N1 Thaolejp) (短文, 中文, 長文, 比較, 検索) với 145 câu hỏi có đáp án, xem kèm bản gốc.
 - **Đề thi đầy đủ**: 37 đề Thaolejp (36 đề thi thử + đề test đầu vào) và đề JLPT N1 12/2021 — 2.665 câu có đáp án; thi có giờ 110 phút hoặc luyện tập từng câu.
 - **Đề JLPT N1 thật 2010–2018** (18 đề, 1.262 câu, bản scan): nhận dạng chữ (OCR) từng đề, tách đúng 13 問題; đáp án đọc thủ công từ bảng đáp án chính thức và đối chiếu với OCR. Xem dạng ảnh đề gốc (cắt theo từng câu/đoạn) hoặc dạng chữ.
-- **Nghe**: 10 phần nghe từ vựng N1 (≈5 giờ) và 41 track TRY! N1; nhớ vị trí đang nghe, chỉnh tốc độ 0.75–1.5×.
+- **Nghe**: 10 phần nghe từ vựng N1 (≈5 giờ) và 41 track TRY! N1, có bản chép lời tự động (SenseVoice) chạy theo âm thanh; nhớ vị trí đang nghe, chỉnh tốc độ 0.75–1.5×.
+- **Audio gốc cho thẻ từ vựng**: 2.167 từ Chinh phục từ vựng N1 phát đúng đoạn từ và câu ví dụ trong file nghe.
+- **はじめての N1 単語3000** (bản Hàn–Việt, OCR): 1.815 mục từ có cách đọc, nghĩa Việt, câu ví dụ + dịch; mục chưa khớp từ điển được đánh dấu và kèm ảnh gốc.
+- **Sách TRY! N1**: xem trang gốc, 123 mẫu ngữ pháp (nghĩa Việt bổ sung, giải thích + ví dụ OCR), 10 đề まとめの問題 có audio và đáp án.
+- **Đề 7/2019, 12/2019**: làm trên ảnh đề gốc với phiếu trả lời.
 - **Bài tập có đáp án**: 2 bộ Test từ vựng-ngữ pháp (60 bài), 25 bài tập Cẩm nang ngữ pháp, 2 tài liệu bổ trợ đọc hiểu.
 - **Luyện theo dạng câu**: 13 dạng 問題 (漢字読み, 文脈規定, ★, đọc hiểu…) gom từ tất cả các đề.
 - **Kính ngữ**: bảng 34 động từ 尊敬語・謙譲語・丁寧語, quy tắc, lỗi hay gặp, trắc nghiệm.
